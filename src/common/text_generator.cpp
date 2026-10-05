@@ -1,4 +1,5 @@
 #include "brothumb/generator.h"
+#include "image_io.h"
 #include "text_font.h"
 
 #include <algorithm>
@@ -73,37 +74,22 @@ bool is_keyword(std::string_view word) {
 
 }  // namespace
 
-TextThumbnailGenerator::TextThumbnailGenerator() {
-    supported_extensions_ = {
-        ".txt", ".md", ".markdown", ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp",
-        ".hxx", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json",
-        ".toml", ".yaml", ".yml", ".xml", ".html", ".htm", ".css", ".scss",
-        ".sh", ".bash", ".zsh", ".rs", ".go", ".java", ".kt", ".lua", ".sql",
-        ".cmake", ".ini", ".conf", ".diff", ".patch", ".log"
+TextThumbnailGenerator::TextThumbnailGenerator() = default;
+
+std::vector<std::string> TextThumbnailGenerator::supported_mime_types() const {
+    // Everything that is text/plain qualifies; these name the common families for capability
+    // reporting.
+    return {
+        "text/plain", "text/markdown", "text/x-csrc", "text/x-chdr", "text/x-c++src", "text/x-c++hdr",
+        "text/x-python", "application/javascript", "application/typescript", "application/json",
+        "application/yaml", "application/toml", "application/xml", "text/html", "text/css",
+        "application/x-shellscript", "text/x-patch",
     };
 }
 
 bool TextThumbnailGenerator::can_generate(const std::filesystem::path& path,
                                          const std::string& mime_hint) const {
-    if (!mime_hint.empty()) {
-        if (mime_hint.rfind("text/", 0) == 0 ||
-            mime_hint.find("json") != std::string::npos ||
-            mime_hint.find("xml") != std::string::npos ||
-            mime_hint.find("yaml") != std::string::npos ||
-            mime_hint.find("javascript") != std::string::npos) {
-            return true;
-        }
-    }
-
-    std::string ext = path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-
-    for (const auto& s : supported_extensions_) {
-        if (ext == s) return true;
-    }
-    return false;
+    return detail::type_is_a(detail::resolve_type(path, mime_hint), "text/plain");
 }
 
 Result TextThumbnailGenerator::generate(const std::filesystem::path& path,

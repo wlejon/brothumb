@@ -3,7 +3,18 @@
 Thumbnail service substrate for a desktop environment built on the bro runtime:
 Freedesktop XDG thumbnail cache management, OS native thumbnail extractors (Windows Shell,
 macOS Quick Look), and built-in procedural and image generators. A standalone C++20
-library: no dependency on bro, bronze, or other siblings, its own CMake and ctest.
+library with its own CMake and ctest, and no dependency on bro or bronze. It builds on two
+siblings:
+
+- **broimage** decodes (PNG, JPEG, GIF, BMP, TGA, PSD, HDR, PNM; EXIF orientation applied),
+  resizes (area filter when shrinking, in premultiplied alpha) and encodes the cached PNGs,
+  including their `Thumb::*` text chunks. It is configured lean: no JS API, tensor or JIT.
+- **brovfs** decides what type a file is, from content and name together, using the
+  platform's type database (shared-mime-info, UTType, the Windows registry). The type
+  picks the generator and is recorded as `Thumb::Mimetype`.
+
+Both resolve as `../broimage` and `../brovfs` (broimage in turn finds `../bromath`);
+override with `-DBROIMAGE_DIR=<path>` / `-DBROVFS_DIR=<path>`.
 
 ## Model
 
@@ -36,7 +47,7 @@ include/brothumb/
   uri.h             Canonical RFC 3986 / Freedesktop file:// URI conversion, MD5 & SHA-256
   metadata.h        PNG metadata tags reading/writing (Thumb::URI, Thumb::MTime, Thumb::Size)
   cache.h           ThumbnailCache: XDG thumbnail cache spec (lookup, store, fail, invalidate)
-  generator.h       Built-in generators: Image (PNG, BMP, PPM), Text preview card, PDF
+  generator.h       Built-in generators: Image (broimage formats), Text preview card, PDF
   native.h          OS native thumbnail extractors (Windows Shell, macOS Quick Look)
   pool.h            WorkerThreadPool (priority queue, cancellation tokens)
   service.h         ThumbnailService: async pipeline, event queue, platform capabilities
@@ -51,7 +62,7 @@ include/brothumb/
 | **PNG Metadata** | `Thumb::URI`, `Thumb::MTime`, `Thumb::Size`, `Thumb::Mimetype`, `Software` | Same | Same |
 | **Native Shell Extractor** | Native XDG cache and desktop thumbnailers | `IShellItemImageFactory` / `IThumbnailCache` (COM) | Quick Look `QLThumbnailImageCreate` / `ImageIO` |
 | **PDF First Page** | Headless `pdftoppm` | Windows Shell / WinRT PDF provider | PDFKit (`PDFDocument`, `PDFPage`) |
-| **Image Generator** | Built-in PNG (`lodepng`), BMP (24/32/8-bit), PPM (P3/P6) + custom decoder registration | Same | Same |
+| **Image Generator** | broimage: PNG, JPEG, GIF, BMP, TGA, PSD, HDR, binary PNM (P5/P6), chosen by brovfs type; custom decoders registered by extension | Same | Same |
 | **Text Preview Generator** | Stylized preview card with embedded monospace font, syntax highlighting, gutter line numbers, and extension badge | Same | Same |
 | **Worker Pool & Events** | Priority queue (High, Normal, Low), cancellation tokens, host thread snapshot draining via `MessageQueue` | Same | Same |
 
@@ -88,10 +99,10 @@ Real ctests that exercise the real OS, fail in Release (no `assert()`), and leav
 | Test | Coverage & Oracle |
 |------|-------------------|
 | `test_uri` | Official Freedesktop test vectors, MD5 (RFC 1321), SHA-256 (FIPS 180-2), percent-encoding roundtrip |
-| `test_metadata` | PNG metadata tags reading & writing (`Thumb::URI`, `Thumb::MTime`, `Thumb::Size`), cache freshness verification |
+| `test_metadata` | PNG metadata tags reading & writing (`Thumb::URI`, `Thumb::MTime`, `Thumb::Size`, UTF-8 custom tags via iTXt), cache freshness verification |
 | `test_cache` | XDG directory hierarchy, atomic stores, exact lookup, downscaling fallback, failure recording (`fail/`) |
-| `test_generators` | PNG, BMP (24/32/8-bit), PPM (P3/P6) decoders with aspect ratio preservation; Text preview cards; PDF availability |
-| `test_service_async` | Priority worker pool, cancellation tokens, host thread event queue drainage, `set_wake`, `get_sync` |
+| `test_generators` | PNG, BMP, PPM, JPEG with aspect ratio preservation; routing by content type (extensionless PNG, text named `.png`, MIME aliases); no colour fringe from transparent pixels when shrinking; Text preview cards; PDF availability |
+| `test_service_async` | Priority worker pool, cancellation tokens, host thread event queue drainage, `set_wake`, `get_sync`, `Thumb::Mimetype` from brovfs, capability types/extensions |
 | `test_win_native` | Windows Shell `IShellItemImageFactory` thumbnail extraction on real files |
 | `test_mac_native` | macOS Quick Look / ImageIO extraction vs `qlmanage -t` test oracle |
 | `test_linux_native` | Freedesktop `0600` permissions, system `file` oracle, XDG cache interoperability |

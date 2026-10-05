@@ -27,9 +27,39 @@ function(brothumb_warnings target)
     endif()
 endfunction()
 
+# ---- siblings --------------------------------------------------------------------
+# brovfs: file types (which extractor a file goes to). broimage: decode, resize and the PNG
+# (with Freedesktop text tags) the cache stores. Each resolves like bro's siblings: an existing
+# target (a superbuild already added it) wins; otherwise the repo beside this one, overridable
+# with -DBROVFS_DIR=<path> / -DBROIMAGE_DIR=<path>.
+if(NOT TARGET brovfs)
+    get_filename_component(_brovfs_default "${CMAKE_CURRENT_SOURCE_DIR}/../brovfs" ABSOLUTE)
+    set(BROVFS_DIR "${_brovfs_default}" CACHE PATH "Path to the brovfs repo")
+    if(NOT EXISTS "${BROVFS_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR "brothumb needs brovfs: clone it beside brothumb (../brovfs) or pass -DBROVFS_DIR=<path>")
+    endif()
+    message(STATUS "brothumb: brovfs from ${BROVFS_DIR}")
+    set(BROVFS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${BROVFS_DIR}" "${CMAKE_BINARY_DIR}/brovfs" EXCLUDE_FROM_ALL)
+endif()
+
+if(NOT TARGET broimage)
+    get_filename_component(_broimage_default "${CMAKE_CURRENT_SOURCE_DIR}/../broimage" ABSOLUTE)
+    set(BROIMAGE_DIR "${_broimage_default}" CACHE PATH "Path to the broimage repo")
+    if(NOT EXISTS "${BROIMAGE_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR "brothumb needs broimage: clone it beside brothumb (../broimage, with ../bromath) or pass -DBROIMAGE_DIR=<path>")
+    endif()
+    message(STATUS "brothumb: broimage from ${BROIMAGE_DIR}")
+    # Decode / encode / resize only: no JS API (bronze), no tensor adapter, no JIT backend.
+    set(BROIMAGE_ENABLE_API OFF CACHE BOOL "" FORCE)
+    set(BROIMAGE_WITH_TENSOR OFF CACHE BOOL "" FORCE)
+    set(BROIMAGE_WITH_JIT OFF CACHE BOOL "" FORCE)
+    set(BROIMAGE_TESTS OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${BROIMAGE_DIR}" "${CMAKE_BINARY_DIR}/broimage" EXCLUDE_FROM_ALL)
+endif()
+
 file(GLOB BROTHUMB_COMMON_SOURCES CONFIGURE_DEPENDS
     src/common/*.cpp
-    src/third_party/lodepng/*.cpp
 )
 
 set(BROTHUMB_SOURCES ${BROTHUMB_COMMON_SOURCES})
@@ -58,13 +88,12 @@ target_include_directories(brothumb
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/src/common
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
 )
 
 brothumb_warnings(brothumb)
 
 find_package(Threads REQUIRED)
-target_link_libraries(brothumb PUBLIC Threads::Threads)
+target_link_libraries(brothumb PUBLIC Threads::Threads brovfs::brovfs broimage::broimage)
 
 if(WIN32)
     target_compile_definitions(brothumb PRIVATE
@@ -91,19 +120,6 @@ elseif(APPLE)
         "-framework ImageIO"
         "-framework PDFKit"
         "-framework AppKit"
-    )
-endif()
-
-if(MSVC)
-    set_source_files_properties(
-        src/third_party/lodepng/lodepng.cpp
-        PROPERTIES COMPILE_FLAGS "/wd4267 /wd4334"
-    )
-else()
-    # lodepng uses standard C/C++ idioms that pedantic flags on GCC/Clang
-    set_source_files_properties(
-        src/third_party/lodepng/lodepng.cpp
-        PROPERTIES COMPILE_OPTIONS "-Wno-unused-function;-Wno-unused-parameter"
     )
 endif()
 

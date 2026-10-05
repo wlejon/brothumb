@@ -1,6 +1,7 @@
 #if defined(__APPLE__)
 
 #include "brothumb/generator.h"
+#include "image_io.h"
 #import <PDFKit/PDFKit.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
@@ -21,12 +22,7 @@ std::string PdfThumbnailGenerator::backend_name() {
 
 bool PdfThumbnailGenerator::can_generate(const std::filesystem::path& path,
                                         const std::string& mime_hint) const {
-    if (mime_hint == "application/pdf") return true;
-    std::string ext = path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return ext == ".pdf";
+    return detail::type_is_a(detail::resolve_type(path, mime_hint), "application/pdf");
 }
 
 Result PdfThumbnailGenerator::generate(const std::filesystem::path& path,

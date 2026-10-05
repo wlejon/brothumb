@@ -1,18 +1,13 @@
 #if !defined(_WIN32) && !defined(__APPLE__)
 
 #include "brothumb/generator.h"
+#include "image_io.h"
 #include "image_resizer.h"
-#include "lodepng/lodepng.h"
 
-#include <algorithm>
-#include <array>
 #include <chrono>
-#include <cctype>
-#include <cstdio>
 #include <cstdlib>
-#include <fstream>
-#include <memory>
 #include <string>
+#include <vector>
 
 namespace brothumb {
 
@@ -48,12 +43,7 @@ std::string PdfThumbnailGenerator::backend_name() {
 bool PdfThumbnailGenerator::can_generate(const std::filesystem::path& path,
                                         const std::string& mime_hint) const {
     if (!is_available()) return false;
-    if (mime_hint == "application/pdf") return true;
-    std::string ext = path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return ext == ".pdf";
+    return detail::type_is_a(detail::resolve_type(path, mime_hint), "application/pdf");
 }
 
 Result PdfThumbnailGenerator::generate(const std::filesystem::path& path,
@@ -85,29 +75,19 @@ Result PdfThumbnailGenerator::generate(const std::filesystem::path& path,
         return Result::failure("pdftoppm command failed with exit code: " + std::to_string(ret));
     }
 
-    // Read generated PNG
-    std::ifstream f(temp_output, std::ios::binary | std::ios::ate);
-    if (!f.is_open()) {
-        std::filesystem::remove(temp_output, ec);
-        return Result::failure("Failed to open pdftoppm output: " + temp_output.string());
-    }
-
-    auto sz = f.tellg();
-    f.seekg(0, std::ios::beg);
-    std::vector<uint8_t> png_bytes(static_cast<size_t>(sz));
-    f.read(reinterpret_cast<char*>(png_bytes.data()), sz);
-    f.close();
+    // Read and decode the generated PNG
+    std::vector<uint8_t> png_bytes;
+    Result read_res = detail::read_file_bytes(temp_output, png_bytes);
     std::filesystem::remove(temp_output, ec);
+    if (!read_res) {
+        return Result::failure("Failed to read pdftoppm output: " + read_res.error);
+    }
 
     Image decoded;
-    unsigned w = 0, h = 0;
-    unsigned error = lodepng::decode(decoded.rgba, w, h, png_bytes.data(), png_bytes.size());
-    if (error) {
-        return Result::failure(std::string("Failed to decode pdftoppm PNG: ") + lodepng_error_text(error));
+    Result dec = detail::decode_image(png_bytes.data(), png_bytes.size(), decoded);
+    if (!dec) {
+        return Result::failure("Failed to decode pdftoppm PNG: " + dec.error);
     }
-
-    decoded.width = static_cast<int32_t>(w);
-    decoded.height = static_cast<int32_t>(h);
     out_image = resize_to_fit(decoded, target_size);
 
     return Result::success();

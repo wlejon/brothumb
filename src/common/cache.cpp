@@ -1,7 +1,7 @@
 #include "brothumb/cache.h"
 #include "brothumb/uri.h"
+#include "image_io.h"
 #include "image_resizer.h"
-#include "lodepng/lodepng.h"
 
 #include <cstdlib>
 #include <fstream>
@@ -119,25 +119,14 @@ CacheLookupResult ThumbnailCache::lookup(const std::filesystem::path& source_pat
 
         if (load_image) {
             std::vector<uint8_t> bytes;
-            std::ifstream f(path, std::ios::binary | std::ios::ate);
-            if (f.is_open()) {
-                auto sz = f.tellg();
-                f.seekg(0, std::ios::beg);
-                bytes.resize(static_cast<size_t>(sz));
-                f.read(reinterpret_cast<char*>(bytes.data()), sz);
-
-                unsigned w = 0, h = 0;
-                Image decoded;
-                if (!lodepng::decode(decoded.rgba, w, h, bytes.data(), bytes.size())) {
-                    decoded.width = static_cast<int32_t>(w);
-                    decoded.height = static_cast<int32_t>(h);
-
-                    if (s != size) {
-                        // Downscale larger thumbnail to requested size
-                        result.image = resize_to_fit(decoded, to_pixels(size));
-                    } else {
-                        result.image = std::move(decoded);
-                    }
+            Image decoded;
+            if (detail::read_file_bytes(path, bytes) &&
+                detail::decode_image(bytes.data(), bytes.size(), decoded)) {
+                if (s != size) {
+                    // Downscale larger thumbnail to requested size
+                    result.image = resize_to_fit(decoded, to_pixels(size));
+                } else {
+                    result.image = std::move(decoded);
                 }
             }
         }

@@ -1,6 +1,8 @@
 #include "brothumb/metadata.h"
 #include "brothumb/uri.h"
-#include "lodepng/lodepng.h"
+#include "image_io.h"
+
+#include <broimage/png_text.h>
 
 #include <chrono>
 #include <cstdio>
@@ -65,39 +67,30 @@ Result read_png_metadata_from_memory(const uint8_t* data, size_t size, PngInfo& 
         return Result::failure("Buffer too small for PNG header");
     }
 
-    lodepng::State state;
-    unsigned width = 0, height = 0;
-    unsigned error = lodepng_inspect(&width, &height, &state, data, size);
-    if (error) {
-        return Result::failure(std::string("PNG inspect error: ") + lodepng_error_text(error));
+    broimage::PngInfo png;
+    std::string err;
+    if (!broimage::read_png_info(data, size, png, &err)) {
+        return Result::failure("PNG inspect error: " + err);
     }
 
-    // Inspect ancillary chunks (tEXt, zTXt, iTXt, etc.)
-    const unsigned char* chunk = data + 8;
-    const unsigned char* end = data + size;
-    while (chunk + 12 <= end) {
-        size_t pos = static_cast<size_t>(chunk - data);
-        lodepng_inspect_chunk(&state, pos, data, size);
-        unsigned chunk_len = lodepng_chunk_length(chunk);
-        if (chunk + 12 + chunk_len > end) break;
-        chunk = lodepng_chunk_next_const(chunk);
-        if (!chunk) break;
-    }
+    out_info.width = static_cast<int32_t>(png.width);
+    out_info.height = static_cast<int32_t>(png.height);
+    out_info.bit_depth = static_cast<int32_t>(png.bit_depth);
+    out_info.color_type = static_cast<int32_t>(png.color_type);
 
-    out_info.width = static_cast<int32_t>(width);
-    out_info.height = static_cast<int32_t>(height);
-    out_info.bit_depth = static_cast<int32_t>(state.info_png.color.bitdepth);
-    out_info.color_type = static_cast<int32_t>(state.info_png.color.colortype);
-
-    // Extract text metadata
-    const LodePNGInfo& info = state.info_png;
-    for (size_t i = 0; i < info.text_num; ++i) {
-        std::string key = info.text_keys[i] ? info.text_keys[i] : "";
-        std::string val = info.text_strings[i] ? info.text_strings[i] : "";
+    // tEXt, zTXt and iTXt alike, in file order; the first occurrence of a standard tag wins.
+    bool seen_uri = false, seen_mtime = false;
+    for (const auto& entry : png.text) {
+        const std::string& key = entry.keyword;
+        const std::string& val = entry.text;
 
         if (key == "Thumb::URI") {
+            if (seen_uri) continue;
+            seen_uri = true;
             out_info.metadata.uri = val;
         } else if (key == "Thumb::MTime") {
+            if (seen_mtime) continue;
+            seen_mtime = true;
             try {
                 out_info.metadata.mtime = std::stoll(val);
             } catch (...) {
@@ -130,21 +123,6 @@ Result read_png_metadata_from_memory(const uint8_t* data, size_t size, PngInfo& 
         }
     }
 
-    // Also check itexts if present
-    for (size_t i = 0; i < info.itext_num; ++i) {
-        std::string key = info.itext_keys[i] ? info.itext_keys[i] : "";
-        std::string val = info.itext_strings[i] ? info.itext_strings[i] : "";
-        if (key == "Thumb::URI" && out_info.metadata.uri.empty()) {
-            out_info.metadata.uri = val;
-        } else if (key == "Thumb::MTime" && out_info.metadata.mtime == 0) {
-            try {
-                out_info.metadata.mtime = std::stoll(val);
-            } catch (...) {
-                out_info.metadata.mtime = 0;
-            }
-        }
-    }
-
     return Result::success();
 }
 
@@ -154,20 +132,10 @@ Result read_png_metadata(const std::filesystem::path& png_path, PngInfo& out_inf
         return Result::failure("PNG file does not exist: " + png_path.string());
     }
 
-    std::ifstream file(png_path, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        return Result::failure("Failed to open PNG file: " + png_path.string());
-    }
-
-    std::streamsize file_size = file.tellg();
-    if (file_size <= 0) {
-        return Result::failure("PNG file is empty: " + png_path.string());
-    }
-
-    file.seekg(0, std::ios::beg);
-    std::vector<uint8_t> buffer(static_cast<size_t>(file_size));
-    if (!file.read(reinterpret_cast<char*>(buffer.data()), file_size)) {
-        return Result::failure("Failed to read PNG file: " + png_path.string());
+    std::vector<uint8_t> buffer;
+    Result read = detail::read_file_bytes(png_path, buffer);
+    if (!read) {
+        return Result::failure("Failed to read PNG file: " + read.error);
     }
 
     return read_png_metadata_from_memory(buffer.data(), buffer.size(), out_info);
@@ -178,50 +146,25 @@ Result encode_png_with_metadata(const Image& image, const ThumbnailMetadata& met
     if (image.empty()) {
         return Result::failure("Cannot encode empty image");
     }
+    if (image.rgba.size() != static_cast<size_t>(image.width) * image.height * 4) {
+        return Result::failure("Image buffer does not match its size");
+    }
 
-    lodepng::State state;
-    // Set RGBA8 input format
-    state.info_raw.colortype = LCT_RGBA;
-    state.info_raw.bitdepth = 8;
-    state.info_png.color.colortype = LCT_RGBA;
-    state.info_png.color.bitdepth = 8;
-
-    // Add standard Freedesktop tags
-    if (!metadata.uri.empty()) {
-        lodepng_add_text(&state.info_png, "Thumb::URI", metadata.uri.c_str());
-    }
-    if (metadata.mtime > 0) {
-        std::string mtime_str = std::to_string(metadata.mtime);
-        lodepng_add_text(&state.info_png, "Thumb::MTime", mtime_str.c_str());
-    }
-    if (metadata.file_size >= 0) {
-        std::string size_str = std::to_string(metadata.file_size);
-        lodepng_add_text(&state.info_png, "Thumb::Size", size_str.c_str());
-    }
-    if (!metadata.mimetype.empty()) {
-        lodepng_add_text(&state.info_png, "Thumb::Mimetype", metadata.mimetype.c_str());
-    }
-    if (metadata.image_width >= 0) {
-        std::string w_str = std::to_string(metadata.image_width);
-        lodepng_add_text(&state.info_png, "Thumb::Image::Width", w_str.c_str());
-    }
-    if (metadata.image_height >= 0) {
-        std::string h_str = std::to_string(metadata.image_height);
-        lodepng_add_text(&state.info_png, "Thumb::Image::Height", h_str.c_str());
-    }
-    std::string software = metadata.software.empty() ? "brothumb 0.1.0" : metadata.software;
-    lodepng_add_text(&state.info_png, "Software", software.c_str());
-
+    // Standard Freedesktop tags first, then the caller's own.
+    std::vector<broimage::PngTextEntry> tags;
+    if (!metadata.uri.empty()) tags.push_back({"Thumb::URI", metadata.uri});
+    if (metadata.mtime > 0) tags.push_back({"Thumb::MTime", std::to_string(metadata.mtime)});
+    if (metadata.file_size >= 0) tags.push_back({"Thumb::Size", std::to_string(metadata.file_size)});
+    if (!metadata.mimetype.empty()) tags.push_back({"Thumb::Mimetype", metadata.mimetype});
+    if (metadata.image_width >= 0) tags.push_back({"Thumb::Image::Width", std::to_string(metadata.image_width)});
+    if (metadata.image_height >= 0) tags.push_back({"Thumb::Image::Height", std::to_string(metadata.image_height)});
+    tags.push_back({"Software", metadata.software.empty() ? std::string("brothumb 0.1.0") : metadata.software});
     for (const auto& [k, v] : metadata.custom_tags) {
-        lodepng_add_text(&state.info_png, k.c_str(), v.c_str());
+        tags.push_back({k, v});
     }
 
-    unsigned error = lodepng::encode(out_bytes, image.rgba.data(),
-                                     static_cast<unsigned>(image.width),
-                                     static_cast<unsigned>(image.height),
-                                     state);
-    if (error) {
-        return Result::failure(std::string("PNG encode error: ") + lodepng_error_text(error));
+    if (!broimage::encode_png_memory_with_text(out_bytes, image.rgba.data(), image.width, image.height, 4, tags)) {
+        return Result::failure("PNG encode error (a tag keyword must be 1-79 printable Latin-1 bytes)");
     }
 
     return Result::success();

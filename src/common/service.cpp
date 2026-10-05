@@ -1,7 +1,9 @@
 #include "brothumb/service.h"
 #include "brothumb/native.h"
 #include "brothumb/pool.h"
+#include "image_io.h"
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
@@ -86,13 +88,13 @@ public:
     PlatformCapabilities capabilities() const override {
         PlatformCapabilities caps = NativeThumbnailExtractor::capabilities();
         caps.has_xdg_cache = true;
-        // Merge image and text generator supported extensions
-        std::vector<std::string> exts = {
-            ".png", ".bmp", ".dib", ".ppm", ".pnm",
-            ".txt", ".md", ".cpp", ".c", ".h", ".hpp",
-            ".py", ".js", ".ts", ".json", ".yaml", ".toml"
-        };
-        for (const auto& e : exts) {
+        // The built-in generators' types, and their extensions as the platform's type database
+        // spells them.
+        std::vector<std::string> types = image_generator_.supported_mime_types();
+        for (auto& t : text_generator_.supported_mime_types()) types.push_back(std::move(t));
+        if (PdfThumbnailGenerator::is_available()) types.push_back("application/pdf");
+        caps.supported_mime_types = types;
+        for (const auto& e : detail::extensions_for_types(types)) {
             if (std::find(caps.supported_extensions.begin(),
                           caps.supported_extensions.end(), e) == caps.supported_extensions.end()) {
                 caps.supported_extensions.push_back(e);
@@ -140,6 +142,10 @@ private:
         bool generated = false;
         ThumbnailSource src = ThumbnailSource::Unknown;
 
+        // One type decision (name and content, brovfs) picks the generators below and is
+        // recorded as the cached thumbnail's Thumb::Mimetype.
+        const std::string mime = detail::resolve_type(path, "");
+
         // 2. Try OS native if preferred
         if (options.prefer_native && config_.enable_native && NativeThumbnailExtractor::is_supported()) {
             Result native_res = NativeThumbnailExtractor::extract(path, px, out_image);
@@ -154,7 +160,7 @@ private:
         }
 
         // 3. Try Image generator
-        if (!generated && image_generator_.can_generate(path)) {
+        if (!generated && image_generator_.can_generate(path, mime)) {
             Result img_res = image_generator_.generate(path, px, out_image);
             if (img_res && !out_image.empty()) {
                 generated = true;
@@ -167,7 +173,7 @@ private:
         }
 
         // 4. Try PDF generator
-        if (!generated && pdf_generator_.can_generate(path)) {
+        if (!generated && pdf_generator_.can_generate(path, mime)) {
             Result pdf_res = pdf_generator_.generate(path, px, out_image);
             if (pdf_res && !out_image.empty()) {
                 generated = true;
@@ -180,7 +186,7 @@ private:
         }
 
         // 5. Try Text generator
-        if (!generated && text_generator_.can_generate(path)) {
+        if (!generated && text_generator_.can_generate(path, mime)) {
             Result txt_res = text_generator_.generate(path, px, out_image);
             if (txt_res && !out_image.empty()) {
                 generated = true;
@@ -206,7 +212,9 @@ private:
 
         // 7. Store in cache if requested
         if (options.store_cache && src != ThumbnailSource::Cache) {
-            cache_.store(path, options.size, out_image);
+            ThumbnailMetadata meta;
+            meta.mimetype = mime;
+            cache_.store(path, options.size, out_image, meta);
         }
 
         return Result::success();

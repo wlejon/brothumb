@@ -44,6 +44,7 @@ int main() {
     meta.image_height = 600;
     meta.software = "brothumb test suite";
     meta.custom_tags["X-Custom-Tag"] = "BroThumbValue";
+    meta.custom_tags["X-Unicode-Tag"] = "caf\xC3\xA9 \xE2\x9C\x93"; // UTF-8: written as iTXt
 
     // Write PNG with metadata
     brothumb::Result write_res = brothumb::write_png_with_metadata(test_png, img, meta);
@@ -64,6 +65,7 @@ int main() {
     CHECK_EQ(read_info.metadata.image_height, meta.image_height);
     CHECK_EQ(read_info.metadata.software, meta.software);
     CHECK_EQ(read_info.metadata.custom_tags["X-Custom-Tag"], "BroThumbValue");
+    CHECK_EQ(read_info.metadata.custom_tags["X-Unicode-Tag"], "caf\xC3\xA9 \xE2\x9C\x93");
 
     // Freshness verification test
     // 1. Fresh thumbnail matching current source file

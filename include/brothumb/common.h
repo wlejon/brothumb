@@ -77,7 +77,7 @@ inline ThumbnailSize size_from_pixels(int32_t px) {
 enum class ThumbnailSource {
     Unknown,
     Cache,             // Loaded from XDG or platform disk cache
-    GeneratorImage,    // Rendered via built-in image decoder (PNG, BMP, PPM)
+    GeneratorImage,    // Rendered via the built-in image generator (broimage decoders)
     GeneratorText,     // Rendered via text preview card generator
     GeneratorPdf,      // Rendered via PDF generator (WinRT, PDFKit, or pdftoppm)
     NativeShell,       // Windows Shell IShellItemImageFactory / macOS QuickLook
@@ -147,6 +147,9 @@ struct PlatformCapabilities {
     bool has_pdf_rendering = false;
     std::string pdf_backend;     // e.g. "Windows.Data.Pdf", "PDFKit", "pdftoppm", or "none"
     std::vector<std::string> supported_extensions;
+    // Types the built-in generators render (ThumbnailService only; subtypes included, e.g.
+    // every text/plain type). Files are typed by brovfs from name and content.
+    std::vector<std::string> supported_mime_types;
 };
 
 }  // namespace brothumb

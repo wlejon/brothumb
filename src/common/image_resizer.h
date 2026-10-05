@@ -1,4 +1,4 @@
-// High quality image aspect-ratio downscaling for thumbnails.
+// Aspect-preserving thumbnail scaling over broimage's alpha-aware resize.
 #pragma once
 
 #include "brothumb/common.h"
@@ -16,7 +16,9 @@ inline Image resize_to_fit(const Image& src, int32_t target_square, bool allow_u
     return resize_to_fit(src, target_square, target_square, allow_upscale);
 }
 
-// Resizes image to exact dimensions using bilinear interpolation with area averaging.
-Image resize_bilinear(const Image& src, int32_t target_w, int32_t target_h);
+// Resizes to exact dimensions: area-averaged when shrinking (no aliasing at large reduction
+// ratios), bilinear when growing, filtered in premultiplied alpha so transparent pixels do not
+// bleed their colour into the edges.
+Image resize_exact(const Image& src, int32_t target_w, int32_t target_h);
 
 }  // namespace brothumb

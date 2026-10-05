@@ -1,13 +1,20 @@
 #include "brothumb/generator.h"
 #include "brothumb/metadata.h"
 #include "check.h"
-#include "lodepng/lodepng.h"
 
+#include <broimage/encode.h>
+
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <vector>
 
 namespace {
+
+void write_bytes(const std::filesystem::path& path, const std::vector<uint8_t>& bytes) {
+    std::ofstream f(path, std::ios::binary);
+    f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+}
 
 void create_test_png(const std::filesystem::path& path, int w, int h) {
     std::vector<uint8_t> rgba(w * h * 4);
@@ -21,9 +28,8 @@ void create_test_png(const std::filesystem::path& path, int w, int h) {
         }
     }
     std::vector<uint8_t> png;
-    lodepng::encode(png, rgba, w, h);
-    std::ofstream f(path, std::ios::binary);
-    f.write(reinterpret_cast<const char*>(png.data()), png.size());
+    broimage::encode_png_memory(png, rgba.data(), w, h, 4);
+    write_bytes(path, png);
 }
 
 void create_test_bmp(const std::filesystem::path& path, int w, int h) {
@@ -132,6 +138,73 @@ int main() {
     CHECK(res_ppm.ok);
     CHECK_EQ(thumb_ppm.width, 64);
     CHECK_EQ(thumb_ppm.height, 64);
+
+    // 3b. JPEG (broimage), and routing by type rather than extension.
+    auto jpg_path = temp_dir / ("brothumb_gen_" + nonce + ".jpg");
+    auto noext_path = temp_dir / ("brothumb_gen_" + nonce + "_noext");
+    auto fake_png = temp_dir / ("brothumb_gen_" + nonce + "_text.png");
+    auto alpha_path = temp_dir / ("brothumb_gen_" + nonce + "_alpha.png");
+    struct Cleaner2 {
+        std::vector<std::filesystem::path> paths;
+        ~Cleaner2() {
+            std::error_code ec;
+            for (const auto& p : paths) std::filesystem::remove(p, ec);
+        }
+    } cleaner2{{jpg_path, noext_path, fake_png, alpha_path}};
+    {
+        std::vector<uint8_t> rgb(90 * 30 * 3, 200), jpg;
+        CHECK(broimage::encode_jpeg_memory(jpg, rgb.data(), 90, 30, 3, 90));
+        write_bytes(jpg_path, jpg);
+    }
+    CHECK(img_gen.can_generate(jpg_path));
+    brothumb::Image thumb_jpg;
+    CHECK(img_gen.generate(jpg_path, 45, thumb_jpg).ok);
+    CHECK_EQ(thumb_jpg.width, 45);
+    CHECK_EQ(thumb_jpg.height, 15);
+
+    create_test_png(noext_path, 40, 20); // a PNG with no extension is still a PNG
+    brothumb::TextThumbnailGenerator text_check;
+    CHECK(img_gen.can_generate(noext_path));
+    CHECK(!text_check.can_generate(noext_path));
+    {
+        std::ofstream f(fake_png);
+        f << "this is text that only claims to be a picture\n";
+    }
+    CHECK(!img_gen.can_generate(fake_png));
+    CHECK(text_check.can_generate(fake_png));
+    CHECK(img_gen.can_generate("x.bin", "image/x-ms-bmp")); // hint through the type database's aliases
+    CHECK(!img_gen.can_generate("x.png", "application/pdf"));
+
+    // 3c. Downscaling filters in premultiplied alpha: the colour of fully transparent pixels
+    // must not bleed into the opaque ones.
+    {
+        const int w = 64, h = 64;
+        std::vector<uint8_t> rgba(static_cast<size_t>(w) * h * 4);
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                uint8_t* p = &rgba[(static_cast<size_t>(y) * w + x) * 4];
+                bool opaque = (x / 2 + y / 2) % 2 == 0;
+                p[0] = opaque ? 0 : 255; // transparent pixels are red, opaque ones blue
+                p[1] = 0;
+                p[2] = opaque ? 255 : 0;
+                p[3] = opaque ? 255 : 0;
+            }
+        }
+        std::vector<uint8_t> png;
+        broimage::encode_png_memory(png, rgba.data(), w, h, 4);
+        write_bytes(alpha_path, png);
+        brothumb::Image small;
+        CHECK(img_gen.generate(alpha_path, 16, small).ok);
+        CHECK_EQ(small.width, 16);
+        int max_red = 0, min_alpha = 255, max_alpha = 0;
+        for (size_t i = 0; i + 3 < small.rgba.size(); i += 4) {
+            if (small.rgba[i + 3] > 0) max_red = std::max<int>(max_red, small.rgba[i]);
+            min_alpha = std::min<int>(min_alpha, small.rgba[i + 3]);
+            max_alpha = std::max<int>(max_alpha, small.rgba[i + 3]);
+        }
+        CHECK(max_red <= 8);                               // no red fringe
+        CHECK(min_alpha >= 100 && max_alpha <= 160);       // area-averaged: half coverage everywhere
+    }
 
     // 4. Test Custom Decoder Registration
     img_gen.register_decoder(".custom", [](const uint8_t*, size_t, brothumb::Image& out) {

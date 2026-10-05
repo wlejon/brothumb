@@ -1,7 +1,9 @@
 #include "brothumb/service.h"
 #include "check.h"
-#include "lodepng/lodepng.h"
 
+#include <broimage/encode.h>
+
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <fstream>
@@ -11,7 +13,7 @@ namespace {
 void create_dummy_png(const std::filesystem::path& path) {
     std::vector<uint8_t> rgba(256 * 256 * 4, 180);
     std::vector<uint8_t> png;
-    lodepng::encode(png, rgba, 256, 256);
+    broimage::encode_png_memory(png, rgba.data(), 256, 256, 4);
     std::ofstream f(path, std::ios::binary);
     f.write(reinterpret_cast<const char*>(png.data()), png.size());
 }
@@ -160,6 +162,23 @@ int main() {
     CHECK_EQ(sync_src, brothumb::ThumbnailSource::Cache);
     CHECK_EQ(sync_img.width, 128);
     CHECK_EQ(sync_img.height, 128);
+
+    // The cached thumbnails carry the type brovfs gave the source.
+    auto cached_img = service->cache().lookup(test_img, brothumb::ThumbnailSize::Normal);
+    CHECK(cached_img.found);
+    CHECK_EQ(cached_img.metadata.mimetype, "image/png");
+    auto cached_txt = service->cache().lookup(test_txt, brothumb::ThumbnailSize::Large);
+    CHECK(cached_txt.found);
+    CHECK_EQ(cached_txt.metadata.mimetype, "text/plain");
+
+    // Capabilities: the generators' types and their extensions from the type database.
+    auto caps = service->capabilities();
+    auto has = [](const std::vector<std::string>& v, const char* s) {
+        return std::find(v.begin(), v.end(), s) != v.end();
+    };
+    CHECK(has(caps.supported_mime_types, "image/png") && has(caps.supported_mime_types, "text/plain"));
+    CHECK(has(caps.supported_extensions, ".png") && has(caps.supported_extensions, ".jpg"));
+    CHECK(has(caps.supported_extensions, ".txt") && has(caps.supported_extensions, ".ppm"));
 
     return bttest::finish("test_service_async");
 }
