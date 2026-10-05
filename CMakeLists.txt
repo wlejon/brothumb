@@ -14,6 +14,18 @@ endif()
 
 option(BROTHUMB_BUILD_TESTS "Build the brothumb tests" ${_brothumb_top_level})
 
+# Coverage. Scoped to a top-level build: a consumer that add_subdirectory()s
+# brothumb has no business having its own build instrumented from in here.
+option(BROTHUMB_COVERAGE "Instrument the build for gcov coverage (GCC/Clang)" OFF)
+if(BROTHUMB_COVERAGE AND _brothumb_top_level)
+    if(MSVC)
+        message(FATAL_ERROR "BROTHUMB_COVERAGE requires GCC or Clang (gcov instrumentation); MSVC is unsupported.")
+    endif()
+    add_compile_options(--coverage -O0 -g)
+    add_link_options(--coverage)
+    message(STATUS "brothumb: coverage instrumentation ON (-O0)")
+endif()
+
 if(MSVC AND _brothumb_top_level)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
@@ -29,34 +41,48 @@ endfunction()
 
 # ---- siblings --------------------------------------------------------------------
 # brovfs: file types (which extractor a file goes to). broimage: decode, resize and the PNG
-# (with Freedesktop text tags) the cache stores. Each resolves like bro's siblings: an existing
-# target (a superbuild already added it) wins; otherwise the repo beside this one, overridable
-# with -DBROVFS_DIR=<path> / -DBROIMAGE_DIR=<path>.
-if(NOT TARGET brovfs)
-    get_filename_component(_brovfs_default "${CMAKE_CURRENT_SOURCE_DIR}/../brovfs" ABSOLUTE)
-    set(BROVFS_DIR "${_brovfs_default}" CACHE PATH "Path to the brovfs repo")
-    if(NOT EXISTS "${BROVFS_DIR}/CMakeLists.txt")
-        message(FATAL_ERROR "brothumb needs brovfs: clone it beside brothumb (../brovfs) or pass -DBROVFS_DIR=<path>")
+# (with Freedesktop text tags) the cache stores; it needs bromath (header-only).
+#
+# Each resolves like every bro sibling: an existing target (a superbuild already added it)
+# wins; otherwise a standalone checkout beside the top-level project (../<name>, overridable
+# with -D<NAME>_DIR=<path>); otherwise the top-level project's third_party/<name> submodule
+# (`git submodule update --init --recursive`). third_party/ is flat and carries every
+# transitive sibling: broimage's own fallback looks in the top-level third_party/ too.
+#
+# bromath is resolved here, before broimage, so the target exists when broimage asks for it
+# and the diamond resolves once, from whichever place this project found it.
+function(brothumb_sibling name what)
+    if(TARGET ${name})
+        return()
     endif()
-    message(STATUS "brothumb: brovfs from ${BROVFS_DIR}")
-    set(BROVFS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${BROVFS_DIR}" "${CMAKE_BINARY_DIR}/brovfs" EXCLUDE_FROM_ALL)
-endif()
+    string(TOUPPER "${name}" _upper)
+    set(${_upper}_DIR "${CMAKE_SOURCE_DIR}/../${name}" CACHE PATH
+        "Path to standalone ${name} repo (set to a missing path to force submodule fallback)")
+    if(EXISTS "${${_upper}_DIR}/CMakeLists.txt")
+        message(STATUS "brothumb: ${name} from ${${_upper}_DIR}")
+        add_subdirectory("${${_upper}_DIR}" "${CMAKE_BINARY_DIR}/${name}" EXCLUDE_FROM_ALL)
+    elseif(EXISTS "${CMAKE_SOURCE_DIR}/third_party/${name}/CMakeLists.txt")
+        message(STATUS "brothumb: ${name} from ${CMAKE_SOURCE_DIR}/third_party/${name} (submodule)")
+        add_subdirectory("${CMAKE_SOURCE_DIR}/third_party/${name}" "${CMAKE_BINARY_DIR}/${name}" EXCLUDE_FROM_ALL)
+    else()
+        message(FATAL_ERROR
+            "brothumb needs ${name} (${what}): not found at ${${_upper}_DIR} or "
+            "${CMAKE_SOURCE_DIR}/third_party/${name}. Clone https://github.com/wlejon/${name} next "
+            "to this repo, run `git submodule update --init --recursive`, or override with "
+            "-D${_upper}_DIR=...")
+    endif()
+endfunction()
 
-if(NOT TARGET broimage)
-    get_filename_component(_broimage_default "${CMAKE_CURRENT_SOURCE_DIR}/../broimage" ABSOLUTE)
-    set(BROIMAGE_DIR "${_broimage_default}" CACHE PATH "Path to the broimage repo")
-    if(NOT EXISTS "${BROIMAGE_DIR}/CMakeLists.txt")
-        message(FATAL_ERROR "brothumb needs broimage: clone it beside brothumb (../broimage, with ../bromath) or pass -DBROIMAGE_DIR=<path>")
-    endif()
-    message(STATUS "brothumb: broimage from ${BROIMAGE_DIR}")
-    # Decode / encode / resize only: no JS API (bronze), no tensor adapter, no JIT backend.
-    set(BROIMAGE_ENABLE_API OFF CACHE BOOL "" FORCE)
-    set(BROIMAGE_WITH_TENSOR OFF CACHE BOOL "" FORCE)
-    set(BROIMAGE_WITH_JIT OFF CACHE BOOL "" FORCE)
-    set(BROIMAGE_TESTS OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${BROIMAGE_DIR}" "${CMAKE_BINARY_DIR}/broimage" EXCLUDE_FROM_ALL)
-endif()
+set(BROVFS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+brothumb_sibling(brovfs "file types")
+
+# Decode / encode / resize only: no JS API (bronze), no tensor adapter, no JIT backend.
+set(BROIMAGE_ENABLE_API OFF CACHE BOOL "" FORCE)
+set(BROIMAGE_WITH_TENSOR OFF CACHE BOOL "" FORCE)
+set(BROIMAGE_WITH_JIT OFF CACHE BOOL "" FORCE)
+set(BROIMAGE_TESTS OFF CACHE BOOL "" FORCE)
+brothumb_sibling(bromath "broimage's math headers")
+brothumb_sibling(broimage "decode, resize and PNG encode")
 
 file(GLOB BROTHUMB_COMMON_SOURCES CONFIGURE_DEPENDS
     src/common/*.cpp

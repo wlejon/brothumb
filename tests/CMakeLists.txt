@@ -38,3 +38,8 @@ else()
     brothumb_warnings(test_linux_native)
     add_test(NAME test_linux_native COMMAND test_linux_native)
 endif()
+
+# check.h's skip() exits 77 when a tool or platform feature is absent: ctest reports that as
+# a skip, not a failure.
+get_property(_brothumb_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${_brothumb_tests} PROPERTIES SKIP_RETURN_CODE 77)

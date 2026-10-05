@@ -1,0 +1,89 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+# A thumbnailer reads every file a user browses past, before they decide to
+# open it. brothumb turns those files into images (directly, through
+# broimage, or by handing them to pdftoppm and the OS extractors) and parses
+# the PNGs back out of a cache directory other programs also write. Command
+# injection through file names, path traversal from a cache URI, and unchecked
+# lengths in the PNG text chunks are the realistic bugs, and they are what the
+# C++ queries look for. The Linux backends are what this analyses.
+jobs:
+  analyze:
+    name: Analyze C++
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: brothumb
+
+      - uses: actions/checkout@v7
+        with:
+          repository: wlejon/brovfs
+          path: brovfs
+
+      - uses: actions/checkout@v7
+        with:
+          repository: wlejon/broimage
+          path: broimage
+
+      - uses: actions/checkout@v7
+        with:
+          repository: wlejon/bromath
+          path: bromath
+
+      - name: Install Ninja
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ninja-build
+
+      # Tests off: they are scaffolding, and alerts in them would only be noise.
+      - name: Configure
+        run: cmake -S brothumb -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBROTHUMB_BUILD_TESTS=OFF
+
+      # Everything below is code this repo does not own, built here, ahead of
+      # `init`, which is what keeps it out of the analysis: for a compiled
+      # language CodeQL analyses what it observes the compiler compile while
+      # tracing, and `paths-ignore` does not filter compiled sources.
+      #
+      #   brovfs, broimage — siblings with their own CodeQL workflows;
+      #     extracting them here would double-report every finding against the
+      #     wrong repo.
+      #   stb_image — broimage's vendored decoder, which trips analysers by
+      #     design; its findings are upstream's to answer.
+      #
+      # bromath needs no entry: it is header-only, so its headers are analysed
+      # where they are included, which is correct.
+      - name: Pre-build sibling + vendored code (outside the traced build)
+        run: cmake --build build --parallel 4 --target brovfs stb_image broimage
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: c-cpp
+          build-mode: manual
+          source-root: brothumb
+          queries: security-extended
+
+      # Only brothumb's own TUs are left to compile, so only they are traced.
+      - name: Build brothumb (traced)
+        run: cmake --build build --parallel 4
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:c-cpp

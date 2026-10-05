@@ -1,0 +1,213 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# brothumb resolves its siblings from ../<name> first (see the
+# brothumb_sibling() block in CMakeLists.txt), so the test jobs reconstruct
+# that layout in the runner workspace before configuring:
+#
+#     $GITHUB_WORKSPACE/
+#       brothumb/   <- this repo, checked out into a named path, not the root
+#       brovfs/     <- file types
+#       broimage/   <- decode / resize / PNG encode (lean: no API, tensor or JIT)
+#       bromath/    <- broimage's math headers
+#
+# Hence `path:` on the checkouts and `cmake -S brothumb`. The siblings are
+# taken from main, which mirrors how the stack is developed (everything tracks
+# main), so this CI also catches a breaking change landing in one of them.
+#
+# The `submodule` job builds the other way, from the flat third_party/
+# submodules with no sibling beside it, so the fallback a consumer without the
+# sibling layout relies on cannot rot.
+env:
+  # pdftoppm (the PDF generator) and file(1) (test_linux_native's oracle).
+  LINUX_PACKAGES: >-
+    ninja-build shared-mime-info poppler-utils file
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-gcc,          os: ubuntu-24.04, cc: gcc,   cxx: g++,     config: Release }
+          - { name: linux-clang,        os: ubuntu-24.04, cc: clang, cxx: clang++, config: Release }
+          - { name: windows-msvc,       os: windows-2022,                          config: Release }
+          # Debug CRT: iterator debugging and the library's own assert()s.
+          - { name: windows-msvc-debug, os: windows-2022,                          config: Debug }
+          - { name: macos-arm64,        os: macos-15,                              config: Release }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: brothumb
+
+      - uses: actions/checkout@v7
+        with:
+          repository: wlejon/brovfs
+          path: brovfs
+
+      - uses: actions/checkout@v7
+        with:
+          repository: wlejon/broimage
+          path: broimage
+
+      - uses: actions/checkout@v7
+        with:
+          repository: wlejon/bromath
+          path: bromath
+
+      - name: Install packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends $LINUX_PACKAGES
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cmake -S brothumb -B build
+          else
+            cmake -S brothumb -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.config }}
+          fi
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.config }} --parallel 4
+
+      # One at a time: the tests share the user's thumbnail cache directory.
+      - name: Test
+        run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure -j 1
+
+  # ── Submodule fallback ────────────────────────────────────────────────────
+  #
+  # No sibling checkouts: brovfs, broimage and bromath all come from the flat
+  # third_party/ submodules at the commits this repo pins. The configure step
+  # checks every one of them really took that path.
+  submodule:
+    name: Submodule fallback · ubuntu-24.04
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: brothumb
+          submodules: recursive
+
+      - name: Install packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends $LINUX_PACKAGES
+
+      - name: Configure
+        run: |
+          test ! -e brovfs && test ! -e broimage && test ! -e bromath
+          cmake -S brothumb -B build -G Ninja -DCMAKE_BUILD_TYPE=Release | tee configure.log
+          for s in brovfs bromath broimage; do
+            grep -q "brothumb: $s from .*third_party/$s (submodule)" configure.log
+          done
+
+      - name: Build
+        run: cmake --build build --parallel 4
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -j 1
+
+  # ── Coverage ──────────────────────────────────────────────────────────────
+  #
+  # Scoped to brothumb's own src/ and include/: the siblings are measured by
+  # their own CI. Debug (-O0), so this is also the Linux job where assert()s
+  # are live.
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: brothumb
+
+      - uses: actions/checkout@v7
+        with:
+          repository: wlejon/brovfs
+          path: brovfs
+
+      - uses: actions/checkout@v7
+        with:
+          repository: wlejon/broimage
+          path: broimage
+
+      - uses: actions/checkout@v7
+        with:
+          repository: wlejon/bromath
+          path: bromath
+
+      - name: Install packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcovr $LINUX_PACKAGES
+
+      - name: Configure (instrumented)
+        run: |
+          cmake -S brothumb -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBROTHUMB_COVERAGE=ON
+
+      - name: Build
+        run: cmake --build build --parallel 4
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -j 1
+
+      # pipefail: piping gcovr into tee otherwise hands the step tee's exit
+      # status, so a gcovr crash produces no report and the job still goes green.
+      #
+      # Run from the workspace root, where build/ is, with the filters spelled
+      # brothumb/...: gcovr only looks for .gcda files under its root.
+      - name: Report
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p coverage-html
+          gcovr --root . \
+            --filter 'brothumb/src/' --filter 'brothumb/include/brothumb/' \
+            --exclude-unreachable-branches \
+            --print-summary \
+            --html-details coverage-html/index.html \
+            | tee coverage-summary.txt
+          test -s coverage-html/index.html
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo '## Coverage — `src/` + `include/brothumb/`'
+            echo
+            echo 'Linux backends only; the siblings are measured by their own CI, and the Windows and macOS extractors are exercised by the test matrix, not measured.'
+            echo
+            echo '```'
+            cat coverage-summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-html
+          path: coverage-html/
+          retention-days: 14

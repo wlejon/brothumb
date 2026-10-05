@@ -1,20 +1,23 @@
 # brothumb
 
-Thumbnail service substrate for a desktop environment built on the bro runtime:
+[![CI](https://github.com/wlejon/brothumb/actions/workflows/ci.yml/badge.svg)](https://github.com/wlejon/brothumb/actions/workflows/ci.yml)
+
+Thumbnail service substrate for a desktop environment built on the
+[bro](https://github.com/wlejon/bro) runtime:
 Freedesktop XDG thumbnail cache management, OS native thumbnail extractors (Windows Shell,
 macOS Quick Look), and built-in procedural and image generators. A standalone C++20
 library with its own CMake and ctest, and no dependency on bro or bronze. It builds on two
 siblings:
 
-- **broimage** decodes (PNG, JPEG, GIF, BMP, TGA, PSD, HDR, PNM; EXIF orientation applied),
+- **[broimage](https://github.com/wlejon/broimage)** decodes (PNG, JPEG, GIF, BMP, TGA, PSD, HDR, PNM; EXIF orientation applied),
   resizes (area filter when shrinking, in premultiplied alpha) and encodes the cached PNGs,
   including their `Thumb::*` text chunks. It is configured lean: no JS API, tensor or JIT.
-- **brovfs** decides what type a file is, from content and name together, using the
+- **[brovfs](https://github.com/wlejon/brovfs)** decides what type a file is, from content and name together, using the
   platform's type database (shared-mime-info, UTType, the Windows registry). The type
   picks the generator and is recorded as `Thumb::Mimetype`.
 
-Both resolve as `../broimage` and `../brovfs` (broimage in turn finds `../bromath`);
-override with `-DBROIMAGE_DIR=<path>` / `-DBROVFS_DIR=<path>`.
+broimage in turn needs [bromath](https://github.com/wlejon/bromath) (header-only). How
+they are found is under [Building](#building).
 
 ## Model
 
@@ -67,6 +70,24 @@ include/brothumb/
 | **Worker Pool & Events** | Priority queue (High, Normal, Low), cancellation tokens, host thread snapshot draining via `MessageQueue` | Same | Same |
 
 ## Building
+
+brothumb needs brovfs, broimage and bromath. It looks for checkouts beside it first, which
+is how the sibling repos are developed together:
+
+```bash
+git clone https://github.com/wlejon/brothumb
+git clone https://github.com/wlejon/brovfs     # each overridable with -D<NAME>_DIR=<path>,
+git clone https://github.com/wlejon/broimage   # e.g. -DBROIMAGE_DIR=...
+git clone https://github.com/wlejon/bromath
+```
+
+Any it does not find there it builds from the `third_party/` submodules:
+
+```bash
+git clone --recursive https://github.com/wlejon/brothumb
+# or, in an existing clone:
+git submodule update --init --recursive
+```
 
 Windows (MSVC, Visual Studio generator):
 
