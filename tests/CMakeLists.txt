@@ -91,3 +91,14 @@ endif()
 # a skip, not a failure.
 get_property(_brothumb_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${_brothumb_tests} PROPERTIES SKIP_RETURN_CODE 77)
+
+# Every test executable links no_dialogs.cpp (see the file).
+if(WIN32)
+    get_property(_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(_t IN LISTS _test_targets)
+        get_target_property(_type ${_t} TYPE)
+        if(_type STREQUAL "EXECUTABLE")
+            target_sources(${_t} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/no_dialogs.cpp)
+        endif()
+    endforeach()
+endif()
