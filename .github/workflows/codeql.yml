@@ -48,6 +48,8 @@ jobs:
           repository: wlejon/bromath
           path: bromath
 
+      - uses: wlejon/bronze/.github/actions/checkout-toolchain@main
+
       - name: Install Ninja
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ninja-build
 
@@ -65,11 +67,13 @@ jobs:
       #     wrong repo.
       #   stb_image — broimage's vendored decoder, which trips analysers by
       #     design; its findings are upstream's to answer.
+      #   bronze_runtime_shared — bronze (and brass through it), for
+      #     brothumb_api; analysed by their own workflows.
       #
       # bromath needs no entry: it is header-only, so its headers are analysed
       # where they are included, which is correct.
       - name: Pre-build sibling + vendored code (outside the traced build)
-        run: cmake --build build --parallel 4 --target brovfs stb_image broimage
+        run: cmake --build build --parallel 4 --target brovfs stb_image broimage bronze_runtime_shared
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4

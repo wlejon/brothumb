@@ -19,6 +19,12 @@ concurrency:
 #       brovfs/     <- file types
 #       broimage/   <- decode / resize / PNG encode (lean: no API, tensor or JIT)
 #       bromath/    <- broimage's math headers
+#       bronze/     <- the JavaScript runtime brothumb_api binds
+#       brass/      <- bronze's code generator
+#
+# bronze and brass are laid out by bronze's checkout-toolchain action in every
+# job, the submodule fallback included. brovfs's own api is off here (it
+# defaults on only when brovfs is the top-level project).
 #
 # Hence `path:` on the checkouts and `cmake -S brothumb`. The siblings are
 # taken from main, which mirrors how the stack is developed (everything tracks
@@ -65,6 +71,8 @@ jobs:
         with:
           repository: wlejon/bromath
           path: bromath
+
+      - uses: wlejon/bronze/.github/actions/checkout-toolchain@main
 
       - name: Install packages (Linux)
         if: runner.os == 'Linux'
@@ -119,6 +127,10 @@ jobs:
           path: brothumb
           submodules: recursive
 
+      # bronze/brass are the documented exception to the submodule rule: the
+      # api compiles against the bronze of the program that loads it.
+      - uses: wlejon/bronze/.github/actions/checkout-toolchain@main
+
       - name: Install packages
         run: |
           sudo apt-get update -qq
@@ -165,6 +177,8 @@ jobs:
         with:
           repository: wlejon/bromath
           path: bromath
+
+      - uses: wlejon/bronze/.github/actions/checkout-toolchain@main
 
       - name: Install packages
         run: |

@@ -32,6 +32,18 @@ void create_dummy_txt(const std::filesystem::path& path, const std::string& text
     f << text;
 }
 
+// A path as the body of a single-quoted JS string literal. Windows paths are
+// full of backslashes ("C:\Users\...\Temp\brothumb_api_test_..."), which JS
+// would read as escapes (\b is a backspace), so they are escaped here.
+std::string jsPath(const std::filesystem::path& p) {
+    std::string out;
+    for (char c : p.string()) {
+        if (c == '\\' || c == '\'') out += '\\';
+        out += c;
+    }
+    return out;
+}
+
 bool pumpUntil(const std::function<bool()>& condition, std::chrono::milliseconds timeout = std::chrono::milliseconds(5000)) {
     return bttest::wait_until([&] {
         brothumb::api::tickThumbAsync();
@@ -139,9 +151,9 @@ int main() {
     {
         std::string script =
             "(function() {\n"
-            "  const p1 = bro.thumb.getThumbnailPath('" + test_img1.string() + "');\n"
-            "  const p2 = bro.thumb.getThumbnailPath('" + test_img1.string() + "', { size: 'large' });\n"
-            "  const p3 = bro.thumb.getThumbnailPath('" + test_img1.string() + "', { size: 512 });\n"
+            "  const p1 = bro.thumb.getThumbnailPath('" + jsPath(test_img1) + "');\n"
+            "  const p2 = bro.thumb.getThumbnailPath('" + jsPath(test_img1) + "', { size: 'large' });\n"
+            "  const p3 = bro.thumb.getThumbnailPath('" + jsPath(test_img1) + "', { size: 512 });\n"
             "  if (typeof p1 !== 'string' || !p1.includes('normal')) return false;\n"
             "  if (typeof p2 !== 'string' || !p2.includes('large')) return false;\n"
             "  if (typeof p3 !== 'string' || !p3.includes('x-large')) return false;\n"
@@ -159,7 +171,7 @@ int main() {
         // 6a. Generate thumbnail for image (normal 128x128)
         std::string s1 =
             "(function() {\n"
-            "  const res = bro.thumb.getSync('" + test_img1.string() + "');\n"
+            "  const res = bro.thumb.getSync('" + jsPath(test_img1) + "');\n"
             "  if (!res) return false;\n"
             "  if (res.width !== 128 || res.height !== 128) return false;\n"
             "  if (!(res.pixels instanceof Uint8Array)) return false;\n"
@@ -176,7 +188,7 @@ int main() {
         // 6b. Second call: should come from cache
         std::string s2 =
             "(function() {\n"
-            "  const res = bro.thumb.getSync('" + test_img1.string() + "');\n"
+            "  const res = bro.thumb.getSync('" + jsPath(test_img1) + "');\n"
             "  if (!res) return false;\n"
             "  return res.source === 'cache';\n"
             "})()\n";
@@ -188,7 +200,7 @@ int main() {
         // 6c. Size option large (256x256)
         std::string sLarge =
             "(function() {\n"
-            "  const res = bro.thumb.getSync('" + test_img1.string() + "', { size: 'large' });\n"
+            "  const res = bro.thumb.getSync('" + jsPath(test_img1) + "', { size: 'large' });\n"
             "  if (!res) return false;\n"
             "  return res.width === 256 && res.height === 256 && res.pixels.length === 256 * 256 * 4;\n"
             "})()\n";
@@ -200,7 +212,7 @@ int main() {
         // 6d. Text generator preview
         std::string sTxt =
             "(function() {\n"
-            "  const res = bro.thumb.getSync('" + test_txt1.string() + "', { size: 'normal' });\n"
+            "  const res = bro.thumb.getSync('" + jsPath(test_txt1) + "', { size: 'normal' });\n"
             "  if (!res) return false;\n"
             "  return res.width === 128 && res.height === 128 && res.pixels.length === 128 * 128 * 4;\n"
             "})()\n";
@@ -213,10 +225,10 @@ int main() {
         std::string sCacheOnly =
             "(function() {\n"
             "  // test_img1 is in cache: should succeed\n"
-            "  const res1 = bro.thumb.getSync('" + test_img1.string() + "', { cacheOnly: true });\n"
+            "  const res1 = bro.thumb.getSync('" + jsPath(test_img1) + "', { cacheOnly: true });\n"
             "  if (!res1 || res1.source !== 'cache') return false;\n"
             "  // test_img2 is not yet in cache: should return null\n"
-            "  const res2 = bro.thumb.getSync('" + test_img2.string() + "', { cacheOnly: true });\n"
+            "  const res2 = bro.thumb.getSync('" + jsPath(test_img2) + "', { cacheOnly: true });\n"
             "  if (res2 !== null) return false;\n"
             "  return true;\n"
             "})()\n";
@@ -241,7 +253,7 @@ int main() {
             "  globalThis._asyncSuccess = false;\n"
             "  globalThis._asyncRes = null;\n"
             "  globalThis._asyncErr = null;\n"
-            "  const p = bro.thumb.get('" + test_img2.string() + "', { size: 'normal' });\n"
+            "  const p = bro.thumb.get('" + jsPath(test_img2) + "', { size: 'normal' });\n"
             "  if (!(p instanceof Promise)) return false;\n"
             "  p.then((res) => {\n"
             "    globalThis._asyncSuccess = true;\n"
@@ -304,15 +316,15 @@ int main() {
     std::cout << "Testing invalidate and clearCache..." << std::endl;
     {
         // First verify test_img2 is cached
-        auto rCheckCache1 = evalScript("bro.thumb.getSync('" + test_img2.string() + "', { cacheOnly: true }) !== null;");
+        auto rCheckCache1 = evalScript("bro.thumb.getSync('" + jsPath(test_img2) + "', { cacheOnly: true }) !== null;");
         CHECK(!rCheckCache1.thrown && ev::toBool(rCheckCache1.value));
 
         // Invalidate test_img2
-        auto rInv = evalScript("bro.thumb.invalidate('" + test_img2.string() + "');");
+        auto rInv = evalScript("bro.thumb.invalidate('" + jsPath(test_img2) + "');");
         CHECK(!rInv.thrown && ev::toBool(rInv.value));
 
         // Now lookup should return null
-        auto rCheckCache2 = evalScript("bro.thumb.getSync('" + test_img2.string() + "', { cacheOnly: true }) === null;");
+        auto rCheckCache2 = evalScript("bro.thumb.getSync('" + jsPath(test_img2) + "', { cacheOnly: true }) === null;");
         CHECK(!rCheckCache2.thrown && ev::toBool(rCheckCache2.value));
         std::cout << "  invalidate [PASS]" << std::endl;
 
@@ -327,7 +339,7 @@ int main() {
     {
         auto failedFile = tmp_dir / "failed_item.png";
         create_dummy_png(failedFile, 64, 64, 99);
-        std::string testPath = failedFile.string();
+        std::string testPath = jsPath(failedFile);
 
         auto rHas1 = evalScript("bro.thumb.hasFailed('" + testPath + "') === false;");
         CHECK(!rHas1.thrown && ev::toBool(rHas1.value));
@@ -356,7 +368,7 @@ int main() {
             // Synchronous call
             std::string syncCode =
                 "(function() {\n"
-                "  const res = bro.thumb.getSync('" + iterImg.string() + "');\n"
+                "  const res = bro.thumb.getSync('" + jsPath(iterImg) + "');\n"
                 "  if (!res || res.pixels.length !== res.width * res.height * 4) return false;\n"
                 "  return true;\n"
                 "})()\n";
@@ -367,7 +379,7 @@ int main() {
             std::string asyncCode =
                 "(function() {\n"
                 "  globalThis._gcDone = false;\n"
-                "  bro.thumb.get('" + iterImg.string() + "').then((res) => {\n"
+                "  bro.thumb.get('" + jsPath(iterImg) + "').then((res) => {\n"
                 "    globalThis._gcDone = (res && res.pixels.length === res.width * res.height * 4);\n"
                 "  }).catch(() => {\n"
                 "    globalThis._gcDone = false;\n"

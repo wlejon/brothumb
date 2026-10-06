@@ -150,7 +150,11 @@ elseif(APPLE)
 endif()
 
 # --- Standalone Bronze JavaScript API ---
-option(BROTHUMB_ENABLE_API "Build Bronze JavaScript API" ON)
+# On by default only when brothumb is the top-level project. A library that
+# consumes brothumb then never needs bronze for it; bro forces
+# BROTHUMB_ENABLE_API ON itself when it wants the binding. (The same rule is
+# what keeps the nested brovfs from demanding bronze here.)
+option(BROTHUMB_ENABLE_API "Build Bronze JavaScript API" ${PROJECT_IS_TOP_LEVEL})
 if(BROTHUMB_ENABLE_API)
     if(NOT TARGET bronze_runtime_shared)
         set(BRONZE_BUILD_SHARED_RUNTIME ON CACHE BOOL "" FORCE)
