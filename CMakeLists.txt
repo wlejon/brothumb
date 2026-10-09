@@ -55,10 +55,10 @@ endfunction()
 # bromath is resolved here, before broimage, so the target exists when broimage asks for it
 # and the diamond resolves once, from whichever place this project found it.
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/bro_deps.cmake)
-bro_dependency(brovfs GITHUB wlejon/brovfs REF 634ee1228e55fd2aaa5d50437b5b571f45e9385d OPTIONS BROVFS_BUILD_TESTS=OFF)
-bro_dependency(bromath GITHUB wlejon/bromath REF 8b511fbd69c014bf0584d2b42e6c96a8cf720f6a)
+bro_dependency(brovfs GITHUB wlejon/brovfs OPTIONS BROVFS_BUILD_TESTS=OFF)
+bro_dependency(bromath GITHUB wlejon/bromath)
 # Decode / encode / resize only: no JS API (bronze), no tensor adapter, no JIT backend.
-bro_dependency(broimage GITHUB wlejon/broimage REF 9346cd5e97cb2fba0bae15e9f15fc0d9e37349ee
+bro_dependency(broimage GITHUB wlejon/broimage
                OPTIONS BROIMAGE_ENABLE_API=OFF BROIMAGE_WITH_TENSOR=OFF BROIMAGE_WITH_JIT=OFF BROIMAGE_TESTS=OFF)
 
 file(GLOB BROTHUMB_COMMON_SOURCES CONFIGURE_DEPENDS
@@ -136,7 +136,7 @@ if(BROTHUMB_ENABLE_API)
     # bronze (with brass, its code generator) through cmake/bro_deps.cmake: an
     # outer project's target, else ../bronze beside the top-level project, else
     # the pinned commit, fetched at configure.
-    bro_dependency(bronze GITHUB wlejon/bronze REF 15ce4cf5fc25d8afe03882985ae95adcba46a6a9 TARGET bronze_runtime_shared
+    bro_dependency(bronze GITHUB wlejon/bronze TARGET bronze_runtime_shared
                    OPTIONS BRONZE_BUILD_SHARED_RUNTIME=ON BRONZE_BUILD_TESTS=OFF)
 
     add_subdirectory(src/api)
