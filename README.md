@@ -110,7 +110,7 @@ order:
 1. An existing CMake target (`brovfs`, `broimage`, `bromath`) a parent superbuild already added;
 2. A working tree beside the top-level project (`../brovfs`, `../broimage`, `../bromath`), or
    `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>`;
-3. The pinned commit, fetched from GitHub at configure, so a plain `git clone` builds.
+3. The head of its main branch, fetched from GitHub at configure, so a plain `git clone` builds.
 
 ### Consuming `brothumb` in CMake
 
@@ -153,7 +153,7 @@ ctest --test-dir build-release --output-on-failure -j 1
 
 - `-DBROTHUMB_BUILD_TESTS=ON|OFF` (default: ON when top-level): build test suite.
 - `-DBROTHUMB_COVERAGE=ON|OFF` (default: OFF): instrument GCC/Clang with gcov (`--coverage -O0 -g`).
-- `-DBROTHUMB_ENABLE_API=ON|OFF` (default: ON when top-level): build standalone Bronze JavaScript API (`brothumb_api`; bronze from `../bronze` or the pinned commit).
+- `-DBROTHUMB_ENABLE_API=ON|OFF` (default: ON when top-level): build standalone Bronze JavaScript API (`brothumb_api`; bronze from `../bronze` or the head of its main branch).
 
 ## Tests
 

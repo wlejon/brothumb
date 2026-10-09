@@ -1,9 +1,8 @@
 version: 2
 
 # No package manifest to watch. The siblings (brovfs, broimage, bromath) and
-# bronze are bro_dependency() pins in CMakeLists.txt, moved deliberately (bro's
-# scripts/bump-deps.sh) when brothumb needs a newer one; a ../<name> working
-# tree wins locally. That leaves the pinned actions in .github/workflows/.
+# bronze are bro_dependency() calls in CMakeLists.txt that track their main; a
+# ../<name> working tree wins locally. That leaves the pinned actions in .github/workflows/.
 updates:
   - package-ecosystem: github-actions
     directory: /

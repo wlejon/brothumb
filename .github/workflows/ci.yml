@@ -12,7 +12,7 @@ concurrency:
 
 # brothumb's siblings (brovfs for file types; broimage, lean, with bromath for
 # decode / resize / PNG encode) and bronze with brass (the JavaScript runtime
-# brothumb_api binds) come from the commits CMakeLists.txt pins
+# brothumb_api binds) come from the heads of their main branches
 # (cmake/bro_deps.cmake), fetched at configure, so every job builds a plain
 # clone. brovfs's own api is off here (it defaults on only when brovfs is the
 # top-level project).

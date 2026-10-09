@@ -50,7 +50,7 @@ endfunction()
 #
 # Each resolves through cmake/bro_deps.cmake: an existing target (a superbuild already added
 # it) wins; otherwise the ../<name> working tree beside the top-level project; otherwise the
-# pinned commit, fetched at configure.
+# head of its main, fetched at configure.
 #
 # bromath is resolved here, before broimage, so the target exists when broimage asks for it
 # and the diamond resolves once, from whichever place this project found it.
@@ -135,7 +135,7 @@ option(BROTHUMB_ENABLE_API "Build Bronze JavaScript API" ${PROJECT_IS_TOP_LEVEL}
 if(BROTHUMB_ENABLE_API)
     # bronze (with brass, its code generator) through cmake/bro_deps.cmake: an
     # outer project's target, else ../bronze beside the top-level project, else
-    # the pinned commit, fetched at configure.
+    # the head of its main branch, fetched at configure.
     bro_dependency(bronze GITHUB wlejon/bronze TARGET bronze_runtime_shared
                    OPTIONS BRONZE_BUILD_SHARED_RUNTIME=ON BRONZE_BUILD_TESTS=OFF)
 
