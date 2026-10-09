@@ -48,46 +48,18 @@ endfunction()
 # brovfs: file types (which extractor a file goes to). broimage: decode, resize and the PNG
 # (with Freedesktop text tags) the cache stores; it needs bromath (header-only).
 #
-# Each resolves like every bro sibling: an existing target (a superbuild already added it)
-# wins; otherwise a standalone checkout beside the top-level project (../<name>, overridable
-# with -D<NAME>_DIR=<path>); otherwise the top-level project's third_party/<name> submodule
-# (`git submodule update --init --recursive`). third_party/ is flat and carries every
-# transitive sibling: broimage's own fallback looks in the top-level third_party/ too.
+# Each resolves through cmake/bro_deps.cmake: an existing target (a superbuild already added
+# it) wins; otherwise the ../<name> working tree beside the top-level project; otherwise the
+# pinned commit, fetched at configure.
 #
 # bromath is resolved here, before broimage, so the target exists when broimage asks for it
 # and the diamond resolves once, from whichever place this project found it.
-function(brothumb_sibling name what)
-    if(TARGET ${name})
-        return()
-    endif()
-    string(TOUPPER "${name}" _upper)
-    set(${_upper}_DIR "${CMAKE_SOURCE_DIR}/../${name}" CACHE PATH
-        "Path to standalone ${name} repo (set to a missing path to force submodule fallback)")
-    if(EXISTS "${${_upper}_DIR}/CMakeLists.txt")
-        message(STATUS "brothumb: ${name} from ${${_upper}_DIR}")
-        add_subdirectory("${${_upper}_DIR}" "${CMAKE_BINARY_DIR}/${name}" EXCLUDE_FROM_ALL)
-    elseif(EXISTS "${CMAKE_SOURCE_DIR}/third_party/${name}/CMakeLists.txt")
-        message(STATUS "brothumb: ${name} from ${CMAKE_SOURCE_DIR}/third_party/${name} (submodule)")
-        add_subdirectory("${CMAKE_SOURCE_DIR}/third_party/${name}" "${CMAKE_BINARY_DIR}/${name}" EXCLUDE_FROM_ALL)
-    else()
-        message(FATAL_ERROR
-            "brothumb needs ${name} (${what}): not found at ${${_upper}_DIR} or "
-            "${CMAKE_SOURCE_DIR}/third_party/${name}. Clone https://github.com/wlejon/${name} next "
-            "to this repo, run `git submodule update --init --recursive`, or override with "
-            "-D${_upper}_DIR=...")
-    endif()
-endfunction()
-
-set(BROVFS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-brothumb_sibling(brovfs "file types")
-
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/bro_deps.cmake)
+bro_dependency(brovfs GITHUB wlejon/brovfs REF 634ee1228e55fd2aaa5d50437b5b571f45e9385d OPTIONS BROVFS_BUILD_TESTS=OFF)
+bro_dependency(bromath GITHUB wlejon/bromath REF 8b511fbd69c014bf0584d2b42e6c96a8cf720f6a)
 # Decode / encode / resize only: no JS API (bronze), no tensor adapter, no JIT backend.
-set(BROIMAGE_ENABLE_API OFF CACHE BOOL "" FORCE)
-set(BROIMAGE_WITH_TENSOR OFF CACHE BOOL "" FORCE)
-set(BROIMAGE_WITH_JIT OFF CACHE BOOL "" FORCE)
-set(BROIMAGE_TESTS OFF CACHE BOOL "" FORCE)
-brothumb_sibling(bromath "broimage's math headers")
-brothumb_sibling(broimage "decode, resize and PNG encode")
+bro_dependency(broimage GITHUB wlejon/broimage REF 9346cd5e97cb2fba0bae15e9f15fc0d9e37349ee
+               OPTIONS BROIMAGE_ENABLE_API=OFF BROIMAGE_WITH_TENSOR=OFF BROIMAGE_WITH_JIT=OFF BROIMAGE_TESTS=OFF)
 
 file(GLOB BROTHUMB_COMMON_SOURCES CONFIGURE_DEPENDS
     src/common/*.cpp
@@ -161,25 +133,11 @@ endif()
 # what keeps the nested brovfs from demanding bronze here.)
 option(BROTHUMB_ENABLE_API "Build Bronze JavaScript API" ${PROJECT_IS_TOP_LEVEL})
 if(BROTHUMB_ENABLE_API)
-    if(NOT TARGET bronze_runtime_shared)
-        set(BRONZE_BUILD_SHARED_RUNTIME ON CACHE BOOL "" FORCE)
-        set(BRONZE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        if(DEFINED BRONZE_DIR AND EXISTS "${BRONZE_DIR}/CMakeLists.txt")
-            # Explicit BRONZE_DIR supplied
-        elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../bronze/CMakeLists.txt")
-            set(BRONZE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../bronze" CACHE PATH "bronze source tree")
-        elseif(EXISTS "${CMAKE_SOURCE_DIR}/../bronze/CMakeLists.txt")
-            set(BRONZE_DIR "${CMAKE_SOURCE_DIR}/../bronze" CACHE PATH "bronze source tree")
-        endif()
-
-        if(NOT BRONZE_DIR OR NOT EXISTS "${BRONZE_DIR}/CMakeLists.txt")
-            message(FATAL_ERROR
-                "bronze not found: check it out beside this repository (../bronze, with ../brass beside it) "
-                "or pass -DBRONZE_DIR=<path>.")
-        endif()
-
-        add_subdirectory("${BRONZE_DIR}" "${CMAKE_BINARY_DIR}/bronze-build" EXCLUDE_FROM_ALL)
-    endif()
+    # bronze (with brass, its code generator) through cmake/bro_deps.cmake: an
+    # outer project's target, else ../bronze beside the top-level project, else
+    # the pinned commit, fetched at configure.
+    bro_dependency(bronze GITHUB wlejon/bronze REF 15ce4cf5fc25d8afe03882985ae95adcba46a6a9 TARGET bronze_runtime_shared
+                   OPTIONS BRONZE_BUILD_SHARED_RUNTIME=ON BRONZE_BUILD_TESTS=OFF)
 
     add_subdirectory(src/api)
 endif()

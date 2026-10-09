@@ -102,36 +102,22 @@ int main() {
 
 ## Building
 
-### Sibling vs. Submodule Layout
+### Dependencies
 
-`brothumb` resolves its dependencies in this order:
-1. An existing CMake target (`brovfs::brovfs`, `broimage::broimage`, `bromath`);
-2. Sibling checkout directories beside `brothumb` (`../brovfs`, `../broimage`, `../bromath`), overridable via `-DBROVFS_DIR=<path>`, `-DBROIMAGE_DIR=<path>`, `-DBROMATH_DIR=<path>`;
-3. Submodule fallbacks vendored under `third_party/` (`third_party/brovfs`, `third_party/broimage`, `third_party/bromath`).
-
-#### Sibling Layout (Recommended for dev)
-
-```bash
-git clone https://github.com/wlejon/brothumb
-git clone https://github.com/wlejon/brovfs
-git clone https://github.com/wlejon/broimage
-git clone https://github.com/wlejon/bromath
-```
-
-#### Submodule Layout (Standalone clone)
-
-```bash
-git clone --recursive https://github.com/wlejon/brothumb
-# Or in an existing clone:
-git submodule update --init --recursive
-```
+There are no submodules: brovfs, broimage, bromath (and bronze, for the JavaScript API) are
+`bro_dependency()` pins in `CMakeLists.txt`, resolved through `cmake/bro_deps.cmake` in this
+order:
+1. An existing CMake target (`brovfs`, `broimage`, `bromath`) a parent superbuild already added;
+2. A working tree beside the top-level project (`../brovfs`, `../broimage`, `../bromath`), or
+   `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>`;
+3. The pinned commit, fetched from GitHub at configure, so a plain `git clone` builds.
 
 ### Consuming `brothumb` in CMake
 
 Consumers link the `brothumb::brothumb` alias target:
 
 ```cmake
-add_subdirectory(brothumb)
+add_subdirectory(path/to/brothumb)   # or bro_dependency(brothumb ...)
 target_link_libraries(my_app PRIVATE brothumb::brothumb)
 ```
 
@@ -167,7 +153,7 @@ ctest --test-dir build-release --output-on-failure -j 1
 
 - `-DBROTHUMB_BUILD_TESTS=ON|OFF` (default: ON when top-level): build test suite.
 - `-DBROTHUMB_COVERAGE=ON|OFF` (default: OFF): instrument GCC/Clang with gcov (`--coverage -O0 -g`).
-- `-DBROTHUMB_ENABLE_API=ON|OFF` (default: ON): build standalone Bronze JavaScript API (`brothumb_api`, requires `../bronze`).
+- `-DBROTHUMB_ENABLE_API=ON|OFF` (default: ON when top-level): build standalone Bronze JavaScript API (`brothumb_api`; bronze from `../bronze` or the pinned commit).
 
 ## Tests
 

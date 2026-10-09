@@ -1,9 +1,0 @@
-[submodule "third_party/brovfs"]
-	path = third_party/brovfs
-	url = https://github.com/wlejon/brovfs.git
-[submodule "third_party/broimage"]
-	path = third_party/broimage
-	url = https://github.com/wlejon/broimage.git
-[submodule "third_party/bromath"]
-	path = third_party/bromath
-	url = https://github.com/wlejon/bromath.git
