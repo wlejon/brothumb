@@ -87,6 +87,43 @@ void create_test_ppm(const std::filesystem::path& path, int w, int h) {
     f.write(reinterpret_cast<const char*>(rgb.data()), rgb.size());
 }
 
+// A big-endian, PackBits-compressed RGB TIFF of flat grey carrying EXIF
+// orientation 6 in its own IFD0 (upright it is h x w).
+void create_test_tiff(const std::filesystem::path& path, int w, int h) {
+    std::vector<uint8_t> t = {'M', 'M', 0, 42, 0, 0, 0, 8};
+    auto u16 = [&](uint32_t v) { t.push_back(uint8_t(v >> 8)); t.push_back(uint8_t(v)); };
+    auto u32 = [&](uint32_t v) { u16(v >> 16); u16(v & 0xFFFF); };
+    // PackBits: each row of w*3 bytes of 128 as repeat runs of up to 128.
+    std::vector<uint8_t> strip;
+    for (int y = 0; y < h; ++y)
+        for (int left = w * 3; left > 0; left -= 128) {
+            const int n = left < 128 ? left : 128;
+            strip.push_back(uint8_t(1 - n));
+            strip.push_back(128);
+        }
+    const uint32_t entries = 10, data_at = 8 + 2 + entries * 12 + 4, bps_at = data_at;
+    const uint32_t strip_at = bps_at + 6;
+    u16(entries);
+    auto entry = [&](uint32_t tag, uint32_t type, uint32_t count, uint32_t value) {
+        u16(tag); u16(type); u32(count);
+        if (type == 3 && count == 1) { u16(value); u16(0); } else { u32(value); }
+    };
+    entry(256, 4, 1, uint32_t(w));
+    entry(257, 4, 1, uint32_t(h));
+    entry(258, 3, 3, bps_at);
+    entry(259, 3, 1, 32773);
+    entry(262, 3, 1, 2);
+    entry(273, 4, 1, strip_at);
+    entry(274, 3, 1, 6);
+    entry(277, 3, 1, 3);
+    entry(278, 4, 1, uint32_t(h));
+    entry(279, 4, 1, uint32_t(strip.size()));
+    u32(0);
+    u16(8); u16(8); u16(8);
+    t.insert(t.end(), strip.begin(), strip.end());
+    write_bytes(path, t);
+}
+
 }  // namespace
 
 int main() {
@@ -173,6 +210,18 @@ int main() {
     CHECK(!img_gen.can_generate(fake_png));
     CHECK(text_check.can_generate(fake_png));
     CHECK(img_gen.can_generate("x.bin", "image/x-ms-bmp")); // hint through the type database's aliases
+
+    // TIFF (broimage's own decoder), upright by the orientation in its IFD0.
+    auto tif_path = temp_dir / ("brothumb_gen_" + nonce + ".tif");
+    cleaner2.paths.push_back(tif_path);
+    create_test_tiff(tif_path, 60, 20);
+    CHECK(img_gen.can_generate(tif_path));
+    CHECK(img_gen.can_generate("x.bin", "image/tiff"));
+    brothumb::Image thumb_tif;
+    CHECK(img_gen.generate(tif_path, 30, thumb_tif).ok);
+    CHECK_EQ(thumb_tif.width, 10);
+    CHECK_EQ(thumb_tif.height, 30);
+    CHECK(!thumb_tif.rgba.empty() && thumb_tif.rgba[0] == 128 && thumb_tif.rgba[3] == 255);
     CHECK(!img_gen.can_generate("x.png", "application/pdf"));
 
     // 3c. Downscaling filters in premultiplied alpha: the colour of fully transparent pixels

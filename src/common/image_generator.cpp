@@ -23,9 +23,9 @@ std::string normalize_ext(const std::filesystem::path& path) {
 ImageThumbnailGenerator::ImageThumbnailGenerator() = default;
 
 std::vector<std::string> ImageThumbnailGenerator::supported_mime_types() const {
-    // What broimage (stb_image) decodes.
+    // What broimage decodes (stb_image, and its own TIFF decoder).
     return {
-        "image/png", "image/jpeg", "image/gif", "image/bmp", "image/x-tga",
+        "image/png", "image/jpeg", "image/gif", "image/bmp", "image/x-tga", "image/tiff",
         "image/vnd.adobe.photoshop", "image/vnd.radiance",
         "image/x-portable-pixmap", "image/x-portable-graymap", "image/x-portable-anymap",
     };

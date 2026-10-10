@@ -15,8 +15,8 @@ namespace brothumb::detail {
 // Whole file into memory (Unicode paths on Windows).
 Result read_file_bytes(const std::filesystem::path& path, std::vector<uint8_t>& out_bytes);
 
-// PNG, JPEG, GIF, BMP, TGA, PSD, HDR, binary PNM (broimage / stb_image) to straight RGBA8, with
-// a JPEG's EXIF orientation applied so phone photos come out upright.
+// PNG, JPEG, GIF, BMP, TGA, PSD, HDR, binary PNM, TIFF (broimage) to straight RGBA8, with the
+// EXIF orientation (JPEG, TIFF, WebP, PNG eXIf) applied so phone photos come out upright.
 Result decode_image(const uint8_t* data, size_t size, Image& out_image);
 
 // The type a file is: `hint` when the caller already knows it, otherwise brovfs's answer from

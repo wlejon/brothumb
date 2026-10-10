@@ -39,7 +39,7 @@ public:
 using ImageDecoderFunc = std::function<Result(const uint8_t* data, size_t size, Image& out_image)>;
 
 // Built-in image generator: everything broimage decodes (PNG, JPEG, GIF, BMP, TGA, PSD, HDR,
-// binary PNM; JPEG EXIF orientation applied), plus decoders registered per extension.
+// binary PNM, TIFF; EXIF orientation applied), plus decoders registered per extension.
 class ImageThumbnailGenerator : public IThumbnailGenerator {
 public:
     ImageThumbnailGenerator();
