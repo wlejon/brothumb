@@ -78,7 +78,8 @@ Result ImageThumbnailGenerator::generate(const std::filesystem::path& path,
         // decoding that costs a fraction of the full image (it comes back upright).
         broimage::Image thumb;
         if (broimage::is_heif(bytes.data(), bytes.size()) &&
-            broimage::decode_heif_thumbnail(bytes.data(), bytes.size(), target_size, thumb) && thumb.channels == 4) {
+            broimage::decode_heif_thumbnail(bytes.data(), bytes.size(), target_size, thumb) && thumb.channels == 4 &&
+            std::max(thumb.width, thumb.height) >= target_size) {  // never upscale a small one
             decoded.width = thumb.width;
             decoded.height = thumb.height;
             decoded.rgba = std::move(thumb.pixels);
