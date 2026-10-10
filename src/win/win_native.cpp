@@ -45,6 +45,7 @@ PlatformCapabilities NativeThumbnailExtractor::capabilities() {
     caps.pdf_backend = "Windows.Data.Pdf / Shell";
     caps.supported_extensions = {
         ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".ico", ".webp",
+        ".heic", ".heif", ".avif",  // with the Store's HEIF/HEVC/AV1 extensions; else the built-in generator
         ".mp4", ".mkv", ".avi", ".wmv", ".mov",
         ".pdf", ".docx", ".xlsx", ".pptx",
         ".txt", ".md", ".cpp", ".h"

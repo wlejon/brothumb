@@ -3,9 +3,11 @@
 #include "check.h"
 
 #include <broimage/encode.h>
+#include <broimage/heif.h>
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <fstream>
 #include <vector>
 
@@ -223,6 +225,17 @@ int main() {
     CHECK_EQ(thumb_tif.height, 30);
     CHECK(!thumb_tif.rgba.empty() && thumb_tif.rgba[0] == 128 && thumb_tif.rgba[3] == 255);
     CHECK(!img_gen.can_generate("x.png", "application/pdf"));
+
+    // HEIF types are offered exactly where broimage can decode them: AVIF needs an AV1
+    // decoder the host registers (none here), HEIC/HEIF the system's decoder.
+    {
+        auto types = img_gen.supported_mime_types();
+        auto has = [&](const char* t) { return std::find(types.begin(), types.end(), t) != types.end(); };
+        CHECK(!has("image/avif") && !broimage::can_decode("image/avif"));
+        CHECK_EQ(has("image/heic"), broimage::can_decode("image/heic"));
+        CHECK_EQ(img_gen.can_generate("x.bin", "image/heic"), broimage::can_decode("image/heic"));
+        std::printf("brothumb: HEIC thumbnails %s\n", broimage::can_decode("image/heic") ? "available" : "unavailable");
+    }
 
     // 3c. Downscaling filters in premultiplied alpha: the colour of fully transparent pixels
     // must not bleed into the opaque ones.

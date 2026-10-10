@@ -25,7 +25,7 @@ PlatformCapabilities NativeThumbnailExtractor::capabilities() {
     caps.has_pdf_rendering = true;
     caps.pdf_backend = "PDFKit";
     caps.supported_extensions = {
-        ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".gif", ".heic", ".webp",
+        ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".gif", ".heic", ".heif", ".avif", ".webp",
         ".pdf", ".mp4", ".mov", ".m4v",
         ".txt", ".md", ".cpp", ".h"
     };

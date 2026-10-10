@@ -2,6 +2,9 @@
 #include "image_io.h"
 #include "image_resizer.h"
 
+#include <broimage/decode.h>
+#include <broimage/heif.h>
+
 #include <algorithm>
 #include <cctype>
 #include <vector>
@@ -24,11 +27,17 @@ ImageThumbnailGenerator::ImageThumbnailGenerator() = default;
 
 std::vector<std::string> ImageThumbnailGenerator::supported_mime_types() const {
     // What broimage decodes (stb_image, and its own TIFF decoder).
-    return {
+    std::vector<std::string> types = {
         "image/png", "image/jpeg", "image/gif", "image/bmp", "image/x-tga", "image/tiff",
         "image/vnd.adobe.photoshop", "image/vnd.radiance",
         "image/x-portable-pixmap", "image/x-portable-graymap", "image/x-portable-anymap",
     };
+    // HEIF, where this process can decode it: AVIF once the host registered an AV1
+    // decoder, HEIC/HEIF through the system's decoder (WIC with the HEVC extension, ImageIO).
+    for (const char* t : {"image/avif", "image/heic", "image/heif"}) {
+        if (broimage::can_decode(t)) types.emplace_back(t);
+    }
+    return types;
 }
 
 bool ImageThumbnailGenerator::can_generate(const std::filesystem::path& path,
@@ -61,8 +70,23 @@ Result ImageThumbnailGenerator::generate(const std::filesystem::path& path,
 
     Image decoded;
     auto it = custom_decoders_.find(normalize_ext(path));
-    Result res = it != custom_decoders_.end() ? it->second(bytes.data(), bytes.size(), decoded)
-                                              : detail::decode_image(bytes.data(), bytes.size(), decoded);
+    Result res = Result::failure("");
+    if (it != custom_decoders_.end()) {
+        res = it->second(bytes.data(), bytes.size(), decoded);
+    } else {
+        // A HEIF photo usually carries its own thumbnail item: when it is big enough,
+        // decoding that costs a fraction of the full image (it comes back upright).
+        broimage::Image thumb;
+        if (broimage::is_heif(bytes.data(), bytes.size()) &&
+            broimage::decode_heif_thumbnail(bytes.data(), bytes.size(), target_size, thumb) && thumb.channels == 4) {
+            decoded.width = thumb.width;
+            decoded.height = thumb.height;
+            decoded.rgba = std::move(thumb.pixels);
+            res = Result::success();
+        } else {
+            res = detail::decode_image(bytes.data(), bytes.size(), decoded);
+        }
+    }
     if (!res) return res;
 
     if (decoded.empty()) {
