@@ -14,6 +14,11 @@ foreach(test_name ${COMMON_TESTS})
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
 
+# Not a test: it times thumbnails of the folder it is pointed at.
+add_executable(brothumb_bench_folder bench_folder.cpp)
+target_link_libraries(brothumb_bench_folder PRIVATE brothumb::brothumb)
+brothumb_warnings(brothumb_bench_folder)
+
 if(WIN32)
     add_executable(test_win_native test_win_native.cpp)
     target_link_libraries(test_win_native PRIVATE brothumb::brothumb)

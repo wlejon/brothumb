@@ -39,7 +39,9 @@ using ThumbnailEvent = std::variant<ThumbnailReady, ThumbnailFailed, ThumbnailCa
 class ThumbnailService {
 public:
     struct Config {
-        size_t thread_count = 2;               // Number of background worker threads
+        // Background worker threads; 0 sizes the pool from the hardware
+        // (default_thread_count()).
+        size_t thread_count = 0;
         std::filesystem::path cache_dir;       // Custom cache directory (empty = default XDG)
         bool enable_native = true;             // Allow OS native extraction (Shell/QuickLook)
         bool record_failures = true;           // Write to fail/ cache on repeated errors
@@ -48,6 +50,13 @@ public:
     static std::unique_ptr<ThumbnailService> create(const Config& config,
                                                     std::string* err = nullptr);
     static std::unique_ptr<ThumbnailService> create();
+
+    // The pool a Config with thread_count 0 gets: every hardware thread but
+    // two (one on a machine with three or fewer), which are left to the UI
+    // that asked for the thumbnails. A camera card's photos decode in parallel
+    // this way: each costs tens of milliseconds of one core however small the
+    // thumbnail, since a JPEG's entropy-coded data is read serially.
+    static size_t default_thread_count();
 
     virtual ~ThumbnailService() = default;
 

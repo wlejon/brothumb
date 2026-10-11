@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <atomic>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 
 namespace brothumb {
@@ -17,7 +18,7 @@ public:
     explicit ThumbnailServiceImpl(Config config)
         : config_(std::move(config)),
           cache_(config_.cache_dir),
-          pool_(config_.thread_count) {
+          pool_(config_.thread_count ? config_.thread_count : default_thread_count()) {
     }
 
     ~ThumbnailServiceImpl() override {
@@ -244,6 +245,12 @@ std::unique_ptr<ThumbnailService> ThumbnailService::create(const Config& config,
 
 std::unique_ptr<ThumbnailService> ThumbnailService::create() {
     return create(Config());
+}
+
+size_t ThumbnailService::default_thread_count() {
+    const unsigned hw = std::thread::hardware_concurrency();
+    if (hw == 0) return 2;  // unknown: what the pool used to be
+    return hw <= 3 ? 1 : hw - 2;
 }
 
 }  // namespace brothumb

@@ -26,11 +26,12 @@ std::string normalize_ext(const std::filesystem::path& path) {
 ImageThumbnailGenerator::ImageThumbnailGenerator() = default;
 
 std::vector<std::string> ImageThumbnailGenerator::supported_mime_types() const {
-    // What broimage decodes (stb_image, and its own TIFF decoder).
+    // What broimage decodes (libjpeg-turbo, stb_image, and its own TIFF and CR3 readers).
     std::vector<std::string> types = {
         "image/png", "image/jpeg", "image/gif", "image/bmp", "image/x-tga", "image/tiff",
         "image/vnd.adobe.photoshop", "image/vnd.radiance",
         "image/x-portable-pixmap", "image/x-portable-graymap", "image/x-portable-anymap",
+        "image/x-canon-cr3",  // its embedded JPEG previews, never the RAW data
     };
     // HEIF, where this process can decode it: AVIF once the host registered an AV1
     // decoder, HEIC/HEIF through the system's decoder (WIC with the HEVC extension, ImageIO).
@@ -64,28 +65,32 @@ void ImageThumbnailGenerator::register_decoder(std::string extension, ImageDecod
 
 Result ImageThumbnailGenerator::generate(const std::filesystem::path& path,
                                          int32_t target_size, Image& out_image) {
-    std::vector<uint8_t> bytes;
-    Result read_res = detail::read_file_bytes(path, bytes);
-    if (!read_res) return read_res;
-
     Image decoded;
     auto it = custom_decoders_.find(normalize_ext(path));
     Result res = Result::failure("");
     if (it != custom_decoders_.end()) {
+        std::vector<uint8_t> bytes;
+        Result read_res = detail::read_file_bytes(path, bytes);
+        if (!read_res) return read_res;
         res = it->second(bytes.data(), bytes.size(), decoded);
     } else {
-        // A HEIF photo usually carries its own thumbnail item: when it is big enough,
-        // decoding that costs a fraction of the full image (it comes back upright).
-        broimage::Image thumb;
-        if (broimage::is_heif(bytes.data(), bytes.size()) &&
-            broimage::decode_heif_thumbnail(bytes.data(), bytes.size(), target_size, thumb) && thumb.channels == 4 &&
-            std::max(thumb.width, thumb.height) >= target_size) {  // never upscale a small one
-            decoded.width = thumb.width;
-            decoded.height = thumb.height;
-            decoded.rgba = std::move(thumb.pixels);
+        // Decoded for the thumbnail's size, not the image's (broimage's scaled decode): a
+        // JPEG at the smallest DCT scale that covers it, or the file's own thumbnail when
+        // that is big enough (a JPEG's EXIF one, a HEIF's thumbnail item, a CR3's
+        // previews; then only the head of the file is read). Upright either way.
+        broimage::ScaledDecodeOptions o;
+        o.width = o.height = target_size;
+        broimage::Image img;
+        std::string err;
+        const std::u8string u8 = path.u8string();  // broimage takes UTF-8 paths
+        if (broimage::decode_file_scaled(std::string(u8.begin(), u8.end()), o, img, &err) && img.channels == 4 &&
+            !img.pixels.empty()) {
+            decoded.width = img.width;
+            decoded.height = img.height;
+            decoded.rgba = std::move(img.pixels);
             res = Result::success();
         } else {
-            res = detail::decode_image(bytes.data(), bytes.size(), decoded);
+            res = Result::failure("Image decode failed: " + (err.empty() ? std::string("unknown format") : err));
         }
     }
     if (!res) return res;
