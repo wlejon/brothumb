@@ -63,17 +63,23 @@ ThumbnailCache::ThumbnailCache(std::filesystem::path base_dir)
     : base_dir_(base_dir.empty() ? default_cache_dir() : std::move(base_dir)) {
 }
 
-std::filesystem::path ThumbnailCache::directory_for_size(ThumbnailSize size) const {
-    auto dir = base_dir_ / to_string(size);
+void ThumbnailCache::ensure_directory(const std::filesystem::path& dir) const {
+    std::lock_guard<std::mutex> lock(made_mutex_);
+    if (made_.count(dir)) return;
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
+    if (!ec) made_.insert(dir);   // removed later: the PNG writer creates it again
+}
+
+std::filesystem::path ThumbnailCache::directory_for_size(ThumbnailSize size) const {
+    auto dir = base_dir_ / to_string(size);
+    ensure_directory(dir);
     return dir;
 }
 
 std::filesystem::path ThumbnailCache::directory_for_fail(const std::string& app_name) const {
     auto dir = app_name.empty() ? (base_dir_ / "fail") : (base_dir_ / "fail" / app_name);
-    std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
+    ensure_directory(dir);
     return dir;
 }
 

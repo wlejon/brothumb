@@ -4,7 +4,9 @@
 #include "brothumb/common.h"
 #include "brothumb/metadata.h"
 #include <filesystem>
+#include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 
 namespace brothumb {
@@ -69,7 +71,14 @@ public:
     static std::filesystem::path default_cache_dir();
 
 private:
+    // Create `dir` once per cache: the path helpers run for every result a
+    // caller asks for, often on its UI thread, and creating directories costs
+    // a filesystem round trip per path component (milliseconds on Windows).
+    void ensure_directory(const std::filesystem::path& dir) const;
+
     std::filesystem::path base_dir_;
+    mutable std::mutex made_mutex_;
+    mutable std::set<std::filesystem::path> made_;
 };
 
 }  // namespace brothumb
