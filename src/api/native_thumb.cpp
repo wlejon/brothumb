@@ -352,7 +352,7 @@ void installThumbOnto(Value thumbVal) {
 }
 
 void drainThumbEvents() {
-    ThumbnailService* svc = getService();
+    ThumbnailService* svc = existingService();
     if (!svc) return;
 
     auto events = svc->events().drain();
@@ -390,7 +390,7 @@ void drainThumbEvents() {
 }
 
 void cancelAllPendingThumbRequests() {
-    ThumbnailService* svc = getService();
+    ThumbnailService* svc = existingService();
     for (auto& [reqId, req] : g_pending_requests) {
         if (svc) {
             svc->cancel(reqId);

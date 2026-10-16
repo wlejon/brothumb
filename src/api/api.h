@@ -22,8 +22,13 @@ void shutdownThumbAsync();
 /// Sets the thumbnail service used by the API (defaults to ThumbnailService::create()).
 void setService(std::unique_ptr<brothumb::ThumbnailService> svc);
 
-/// Gets the thumbnail service currently used by the API.
+/// Gets the thumbnail service currently used by the API, making the default
+/// one on first use.
 brothumb::ThumbnailService* getService();
+
+/// The service if one exists, else null; never makes one. The frame tick
+/// uses it, so a page that never asks for a thumbnail starts no workers.
+brothumb::ThumbnailService* existingService();
 
 } // namespace brothumb::api
 

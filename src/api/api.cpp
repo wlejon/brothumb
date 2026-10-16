@@ -21,6 +21,11 @@ ThumbnailService* getService() {
     return g_custom_service.get();
 }
 
+ThumbnailService* existingService() {
+    std::lock_guard lock(g_service_mu);
+    return g_custom_service.get();
+}
+
 void setService(std::unique_ptr<brothumb::ThumbnailService> svc) {
     std::lock_guard lock(g_service_mu);
     g_custom_service = std::move(svc);
