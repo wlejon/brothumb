@@ -1,7 +1,6 @@
 add_library(brothumb_api STATIC
     api.cpp
     access_gate.cpp
-    host_class.cpp
     native_thumb.cpp
 )
 
