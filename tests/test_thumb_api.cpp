@@ -54,6 +54,8 @@ bool pumpUntil(const std::function<bool()>& condition, std::chrono::milliseconds
 
 } // namespace
 
+void runPathGateTests(const std::filesystem::path& tmp);
+
 int main() {
     namespace ev = bronze::embed;
     using namespace bronze::eval;
@@ -398,7 +400,10 @@ int main() {
         std::cout << "  GC stress loop [PASS]" << std::endl;
     }
 
-    // 11. Shutdown and cleanup
+    // 11. The path gate (test_thumb_api_gate.cpp)
+    runPathGateTests(tmp_dir);
+
+    // 12. Shutdown and cleanup
     brothumb::api::shutdownThumbAsync();
     std::cout << "All brothumb API tests PASSED!" << std::endl;
 

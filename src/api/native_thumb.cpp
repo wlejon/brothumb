@@ -107,6 +107,11 @@ void installThumbOnto(Value thumbVal) {
         }
 
         std::filesystem::path sourcePath(ev::toUtf8(pathP.get()));
+        if (auto refused = checkPath(sourcePath, PathAccess::Read)) {
+            ev::Persistent err(newAccessError(refused));
+            ev::rejectPromise(promiseP.get(), err.get());
+            return promiseP.get();
+        }
         bool cacheOnly = false;
         bool force = false;
         ThumbnailOptions opts = parseOptions(optP.get(), &cacheOnly, &force);
@@ -151,6 +156,7 @@ void installThumbOnto(Value thumbVal) {
         }
 
         std::filesystem::path sourcePath(ev::toUtf8(pathP.get()));
+        if (auto refused = checkPath(sourcePath, PathAccess::Read)) return throwAccessError(refused);
         bool cacheOnly = false;
         bool force = false;
         ThumbnailOptions opts = parseOptions(optP.get(), &cacheOnly, &force);
@@ -272,6 +278,7 @@ void installThumbOnto(Value thumbVal) {
         if (ev::isString(appP.get())) {
             appName = ev::toUtf8(appP.get());
         }
+        if (auto refused = checkPath(p, PathAccess::Read)) return throwAccessError(refused);
         ThumbnailService* svc = getService();
         if (!svc) return ev::fromBool(false);
         return ev::fromBool(svc->cache().has_failed(p, appName));
@@ -288,6 +295,7 @@ void installThumbOnto(Value thumbVal) {
         if (ev::isString(appP.get())) {
             appName = ev::toUtf8(appP.get());
         }
+        if (auto refused = checkPath(p, PathAccess::Read)) return throwAccessError(refused);
         ThumbnailService* svc = getService();
         if (!svc) return ev::fromBool(false);
         return ev::fromBool(svc->cache().record_failure(p, appName).ok);
