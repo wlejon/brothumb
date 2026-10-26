@@ -1,4 +1,5 @@
-// bro.thumb under a path gate (api.h, "Path gate"): the natives that read a
+// bro.thumb under the host's access gate (embed/embed_access.h; api.h,
+// "Access"): the natives that read a
 // source file ask the gate first, a refusal is an Error carrying the gate's
 // sentence, code EACCES and the path, the cache's own writes ask nothing, and
 // with the gate removed everything behaves as before. Run from
@@ -7,6 +8,7 @@
 #include "../src/api/api.h"
 #include "check.h"
 #include "embed/embed.h"
+#include "embed/embed_access.h"
 #include "eval/eval.h"
 
 #include <broimage/encode.h>
@@ -98,9 +100,10 @@ void runPathGateTests(const fs::path& tmp) {
     const std::string deniedDir = gatePath(denied.parent_path());
 
     std::atomic<int> calls{0};
-    brothumb::api::setPathGate([&](const std::string& path, brothumb::api::PathAccess access) -> std::string {
+    ev::setAccessGate([&](const ev::AccessRequest& r) -> std::string {
         ++calls;
-        if (access != brothumb::api::PathAccess::Read) return "unexpected write: " + path;
+        const std::string path(r.subject);
+        if (r.kind != ev::AccessKind::Read) return "unexpected access: " + path;
         if (path.compare(0, deniedDir.size(), deniedDir) == 0) return "no files access: " + path;
         return "";
     });
@@ -123,7 +126,7 @@ void runPathGateTests(const fs::path& tmp) {
     CHECK_EQ(calls.load(), beforeCache);
 
     // With the gate removed, nothing asks and everything works as before.
-    brothumb::api::setPathGate(nullptr);
+    ev::setAccessGate(nullptr);
     const int before = calls.load();
     CHECK_EQ(syncJs("bro.thumb.getSync(" + q(denied) + ")"), std::string("ok:image"));
     CHECK_EQ(syncJs("bro.thumb.hasFailed(" + q(denied) + ")"), std::string("ok:false"));

@@ -30,35 +30,25 @@ brothumb::ThumbnailService* getService();
 /// uses it, so a page that never asks for a thumbnail starts no workers.
 brothumb::ThumbnailService* existingService();
 
-// ---- Path gate ------------------------------------------------------------------
+// ---- Access -----------------------------------------------------------------------
 //
-// Which files a program may read is the host's decision, not brothumb's: the host
-// knows which app is running and what it was granted. With no gate set (the
-// default), every path is allowed and nothing below changes.
-
-enum class PathAccess { Read, Write };
-
-/// Answers "" to allow, or the sentence the refusal carries (naming what the app
-/// lacks and the path). `path` is absolute and lexically normal (UTF-8); the host
-/// canonicalizes it (symlinks) before deciding. The gate is called on the JS
-/// thread that made the call, synchronously, before any work is queued, so it may
-/// block to ask the user; it must be thread-safe.
-///
-/// The natives that read the source file ask Read for it: get, getSync (a
-/// cacheOnly request too, since a cached thumbnail is the file's content),
-/// hasFailed and recordFailure (they read its modification time). The thumbnail
-/// cache is brothumb's own, not the program's: writing it (invalidate,
-/// clearFailure, clearCache) and naming a thumbnail's path (getThumbnailPath)
-/// read no source and ask nothing.
-///
-/// A refusal is an Error whose `message` is exactly the gate's sentence, `code` is
-/// "EACCES" and `path` the absolute path asked about: thrown by a synchronous
-/// native, the promise rejected with it by get.
-using PathGate = std::function<std::string(const std::string& path, PathAccess access)>;
-
-/// Installs `gate` process-wide (an empty function removes it). Safe to call while
-/// realms run: calls already inside the old gate finish against it.
-void setPathGate(PathGate gate);
+// Which files a program may read is the host's decision, not brothumb's: the
+// natives that read a source file ask the host's one access gate,
+// bronze::embed::checkAccess (embed/embed_access.h), with AccessKind::Read and the
+// path, absolute and lexically normal (UTF-8; the host canonicalizes it), on the
+// JS thread that made the call, synchronously, before any work is queued. With no
+// gate installed every path is allowed and nothing below changes.
+//
+// Read of the source file: get, getSync (a cacheOnly request too, since a cached
+// thumbnail is the file's content), hasFailed and recordFailure (they read its
+// modification time). The thumbnail cache is brothumb's own, not the program's:
+// writing it (invalidate, clearFailure, clearCache) and naming a thumbnail's path
+// (getThumbnailPath) read no source and ask nothing.
+//
+// A refusal is bronze::embed::newAccessError: an Error whose `message` is the
+// gate's sentence (named PermissionRevoked for a grant taken back), `code` is
+// "EACCES" and `path` the absolute path asked about: thrown by a synchronous
+// native, the promise rejected with it by get.
 
 } // namespace brothumb::api
 
@@ -67,4 +57,3 @@ using brothumb::api::tickThumbAsync;
 using brothumb::api::shutdownThumbAsync;
 using brothumb::api::setService;
 using brothumb::api::getService;
-using brothumb::api::setPathGate;
