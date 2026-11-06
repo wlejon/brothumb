@@ -77,6 +77,9 @@ Value makeImageResult(ThumbnailService* svc, const std::filesystem::path& source
         static_cast<uint32_t>(img.rgba.size())));
 
     std::string thumbPath = svc->cache().thumbnail_path_for_source(sourcePath, size).string();
+    // The program may read its source (every caller asked), so the preview
+    // made of it, in the shared cache, is its to read too (an <img src>).
+    grantDerivedRead(thumbPath);
 
     ObjectBuilder b;
     b.set("width", static_cast<double>(img.width));

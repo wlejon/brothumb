@@ -43,7 +43,11 @@ brothumb::ThumbnailService* existingService();
 // thumbnail is the file's content), hasFailed and recordFailure (they read its
 // modification time). The thumbnail cache is brothumb's own, not the program's:
 // writing it (invalidate, clearFailure, clearCache) and naming a thumbnail's path
-// (getThumbnailPath) read no source and ask nothing.
+// (getThumbnailPath) read no source and ask nothing. A result of get / getSync
+// names its preview's `path` in that cache, and with it tells the gate the
+// program may read that file (AccessKind::ReadDerived), as it may read the
+// source: an `<img src>` of it loads without the program reaching into the
+// cache otherwise.
 //
 // A refusal is bronze::embed::newAccessError: an Error whose `message` is the
 // gate's sentence (named PermissionRevoked for a grant taken back), `code` is

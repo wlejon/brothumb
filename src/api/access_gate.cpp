@@ -26,6 +26,10 @@ PathRefusal checkPath(const std::filesystem::path& p, PathAccess access) {
     return r;
 }
 
+void grantDerivedRead(const std::filesystem::path& p) {
+    if (ev::accessGateActive()) ev::checkAccess(ev::AccessKind::ReadDerived, absoluteUtf8(p));
+}
+
 Value newAccessError(const PathRefusal& refusal) {
     return ev::newAccessError(refusal.message, "EACCES", refusal.path);
 }

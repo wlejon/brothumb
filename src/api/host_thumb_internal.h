@@ -28,6 +28,9 @@ struct PathRefusal {
 };
 /// Asks the gate about `p` (made absolute and lexically normal).
 PathRefusal checkPath(const std::filesystem::path& p, PathAccess access);
+/// Tells the gate the program may read `p`, a preview made from a source it
+/// may read (AccessKind::ReadDerived).
+void grantDerivedRead(const std::filesystem::path& p);
 /// The refusal as an Error: message, code "EACCES", path. Fresh: root it.
 Value newAccessError(const PathRefusal& refusal);
 /// Throws newAccessError into the running program.
