@@ -19,6 +19,12 @@ void tickThumbAsync();
 /// Cancels active thumbnail requests and cleans up async state.
 void shutdownThumbAsync();
 
+/// Called from a worker thread whenever a thumbnail finishes or fails, so a
+/// host whose loop sleeps while idle wakes to settle the promise
+/// (tickThumbAsync). Cheap and thread-safe; applies to the service now and to
+/// any made later.
+void setWake(std::function<void()> wake);
+
 /// Sets the thumbnail service used by the API (defaults to ThumbnailService::create()).
 void setService(std::unique_ptr<brothumb::ThumbnailService> svc);
 

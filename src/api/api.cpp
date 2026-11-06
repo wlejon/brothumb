@@ -2,6 +2,7 @@
 #include "host_thumb_internal.h"
 #include "brothumb/service.h"
 
+#include <functional>
 #include <mutex>
 
 namespace brothumb::api {
@@ -10,13 +11,21 @@ namespace {
 
 std::mutex g_service_mu;
 std::unique_ptr<brothumb::ThumbnailService> g_custom_service;
+std::function<void()> g_wake;  // setWake's, given to every service's event queue
 
 } // namespace
+
+void setWake(std::function<void()> wake) {
+    std::lock_guard lock(g_service_mu);
+    g_wake = std::move(wake);
+    if (g_custom_service) g_custom_service->events().set_wake(g_wake);
+}
 
 ThumbnailService* getService() {
     std::lock_guard lock(g_service_mu);
     if (!g_custom_service) {
         g_custom_service = ThumbnailService::create();
+        if (g_custom_service && g_wake) g_custom_service->events().set_wake(g_wake);
     }
     return g_custom_service.get();
 }
@@ -29,6 +38,7 @@ ThumbnailService* existingService() {
 void setService(std::unique_ptr<brothumb::ThumbnailService> svc) {
     std::lock_guard lock(g_service_mu);
     g_custom_service = std::move(svc);
+    if (g_custom_service && g_wake) g_custom_service->events().set_wake(g_wake);
 }
 
 Value makeError(const std::string& msg) {
