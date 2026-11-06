@@ -17,6 +17,10 @@ concurrency:
 # clone. brovfs's own api is off here (it defaults on only when brovfs is the
 # top-level project).
 env:
+  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_IDLE_TIMEOUT: "0"
+  CMAKE_C_COMPILER_LAUNCHER: sccache
+  CMAKE_CXX_COMPILER_LAUNCHER: sccache
   # pdftoppm (the PDF generator) and file(1) (test_linux_native's oracle).
   LINUX_PACKAGES: >-
     ninja-build shared-mime-info poppler-utils file
@@ -40,6 +44,13 @@ jobs:
         with:
           path: brothumb
 
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: MSVC dev environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install packages (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -48,6 +59,9 @@ jobs:
 
       - name: Install Ninja (macOS)
         if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
         run: brew install ninja
 
       - name: Configure
@@ -56,11 +70,7 @@ jobs:
           CXX: ${{ matrix.cxx }}
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            cmake -S brothumb -B build
-          else
-            cmake -S brothumb -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.config }}
-          fi
+          cmake -S brothumb -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.config }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.config }} --parallel 4
@@ -92,6 +102,9 @@ jobs:
         with:
           path: brothumb
 
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Install packages
         run: |
           sudo apt-get update -qq
@@ -100,7 +113,7 @@ jobs:
       - name: Configure (instrumented)
         run: |
           cmake -S brothumb -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DBROTHUMB_COVERAGE=ON
 
       - name: Build

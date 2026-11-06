@@ -13,18 +13,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 option(BROTHUMB_BUILD_TESTS "Build the brothumb tests" ${_brothumb_top_level})
-
-# Coverage. Scoped to a top-level build: a consumer that add_subdirectory()s
-# brothumb has no business having its own build instrumented from in here.
 option(BROTHUMB_COVERAGE "Instrument the build for gcov coverage (GCC/Clang)" OFF)
-if(BROTHUMB_COVERAGE AND _brothumb_top_level)
-    if(MSVC)
-        message(FATAL_ERROR "BROTHUMB_COVERAGE requires GCC or Clang (gcov instrumentation); MSVC is unsupported.")
-    endif()
-    add_compile_options(--coverage -O0 -g)
-    add_link_options(--coverage)
-    message(STATUS "brothumb: coverage instrumentation ON (-O0)")
-endif()
+option(BROTHUMB_ENABLE_API "Build Bronze JavaScript API" ${PROJECT_IS_TOP_LEVEL})
 
 # The DLL CRT (/MD, /MDd), as bro uses. brothumb_api's tests link
 # bronze_runtime_shared, a DLL whose embed boundary passes C++ objects
@@ -60,6 +50,21 @@ bro_dependency(bromath GITHUB wlejon/bromath)
 # Decode / encode / resize only: no JS API (bronze), no tensor adapter, no JIT backend.
 bro_dependency(broimage GITHUB wlejon/broimage
                OPTIONS BROIMAGE_ENABLE_API=OFF BROIMAGE_WITH_TENSOR=OFF BROIMAGE_WITH_JIT=OFF BROIMAGE_TESTS=OFF)
+if(BROTHUMB_ENABLE_API)
+    bro_dependency(bronze GITHUB wlejon/bronze TARGET bronze_runtime_shared
+                   OPTIONS BRONZE_BUILD_SHARED_RUNTIME=ON BRONZE_BUILD_TESTS=OFF)
+endif()
+
+# Coverage. Scoped to a top-level build after sibling dependencies so _deps
+# (brovfs, broimage, brass, bronze) are not instrumented with --coverage -O0.
+if(BROTHUMB_COVERAGE AND _brothumb_top_level)
+    if(MSVC)
+        message(FATAL_ERROR "BROTHUMB_COVERAGE requires GCC or Clang (gcov instrumentation); MSVC is unsupported.")
+    endif()
+    add_compile_options(--coverage -O0 -g -UNDEBUG)
+    add_link_options(--coverage)
+    message(STATUS "brothumb: coverage instrumentation ON (-O0)")
+endif()
 
 file(GLOB BROTHUMB_COMMON_SOURCES CONFIGURE_DEPENDS
     src/common/*.cpp
@@ -131,14 +136,7 @@ endif()
 # consumes brothumb then never needs bronze for it; bro forces
 # BROTHUMB_ENABLE_API ON itself when it wants the binding. (The same rule is
 # what keeps the nested brovfs from demanding bronze here.)
-option(BROTHUMB_ENABLE_API "Build Bronze JavaScript API" ${PROJECT_IS_TOP_LEVEL})
 if(BROTHUMB_ENABLE_API)
-    # bronze (with brass, its code generator) through cmake/bro_deps.cmake: an
-    # outer project's target, else ../bronze beside the top-level project, else
-    # the head of its main branch, fetched at configure.
-    bro_dependency(bronze GITHUB wlejon/bronze TARGET bronze_runtime_shared
-                   OPTIONS BRONZE_BUILD_SHARED_RUNTIME=ON BRONZE_BUILD_TESTS=OFF)
-
     add_subdirectory(src/api)
 endif()
 
