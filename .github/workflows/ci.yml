@@ -70,7 +70,10 @@ jobs:
           CXX: ${{ matrix.cxx }}
         shell: bash
         run: |
-          cmake -S brothumb -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.config }}
+          cmake -S brothumb -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_POLICY_DEFAULT_CMP0141=NEW \
+            -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
 
       - name: Build
         run: cmake --build build --config ${{ matrix.config }} --parallel 4
