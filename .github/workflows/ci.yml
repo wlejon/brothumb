@@ -45,7 +45,7 @@ jobs:
           path: brothumb
 
       - name: sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: MSVC dev environment (Windows)
         if: runner.os == 'Windows'
@@ -106,7 +106,7 @@ jobs:
           path: brothumb
 
       - name: sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Install packages
         run: |
