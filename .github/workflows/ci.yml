@@ -44,8 +44,28 @@ jobs:
         with:
           path: brothumb
 
+      - name: Seed sccache tool cache
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ARCH="x64"; ASSET="sccache-v0.19.0-x86_64-pc-windows-msvc.tar.gz"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            ARCH="arm64"; ASSET="sccache-v0.19.0-aarch64-apple-darwin.tar.gz"
+          else
+            ARCH="x64"; ASSET="sccache-v0.19.0-x86_64-unknown-linux-musl.tar.gz"
+          fi
+          DEST="$RUNNER_TOOL_CACHE/sccache/0.19.0/$ARCH"
+          mkdir -p "$DEST"
+          if (cd "$DEST" && gh release download v0.19.0 -R mozilla/sccache -p "$ASSET" -O "$ASSET" && tar -xzf "$ASSET" --strip-components=1 && rm -f "$ASSET"); then
+            touch "${DEST}.complete"
+          fi
+
       - name: sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: "v0.19.0"
 
       - name: MSVC dev environment (Windows)
         if: runner.os == 'Windows'
@@ -105,8 +125,28 @@ jobs:
         with:
           path: brothumb
 
+      - name: Seed sccache tool cache
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ARCH="x64"; ASSET="sccache-v0.19.0-x86_64-pc-windows-msvc.tar.gz"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            ARCH="arm64"; ASSET="sccache-v0.19.0-aarch64-apple-darwin.tar.gz"
+          else
+            ARCH="x64"; ASSET="sccache-v0.19.0-x86_64-unknown-linux-musl.tar.gz"
+          fi
+          DEST="$RUNNER_TOOL_CACHE/sccache/0.19.0/$ARCH"
+          mkdir -p "$DEST"
+          if (cd "$DEST" && gh release download v0.19.0 -R mozilla/sccache -p "$ASSET" -O "$ASSET" && tar -xzf "$ASSET" --strip-components=1 && rm -f "$ASSET"); then
+            touch "${DEST}.complete"
+          fi
+
       - name: sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: "v0.19.0"
 
       - name: Install packages
         run: |
@@ -148,15 +188,17 @@ jobs:
       - name: Job summary
         if: always()
         run: |
-          {
-            echo '## Coverage — `src/` + `include/brothumb/`'
-            echo
-            echo 'Linux backends only; the siblings are measured by their own CI, and the Windows and macOS extractors are exercised by the test matrix, not measured.'
-            echo
-            echo '```'
-            cat coverage-summary.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -f coverage-summary.txt ]; then
+            {
+              echo '## Coverage — `src/` + `include/brothumb/`'
+              echo
+              echo 'Linux backends only; the siblings are measured by their own CI, and the Windows and macOS extractors are exercised by the test matrix, not measured.'
+              echo
+              echo '```'
+              cat coverage-summary.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload HTML report
         if: always()
